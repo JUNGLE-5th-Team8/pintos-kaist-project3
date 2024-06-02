@@ -4,6 +4,8 @@
 #include "vm/vm.h"
 #include "vm/inspect.h"
 #include "include/lib/kernel/hash.h"
+#include "include/threads/vaddr.h"
+#include "include/threads/mmu.h"
 
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
@@ -68,8 +70,22 @@ err:
 struct page *
 spt_find_page(struct supplemental_page_table *spt UNUSED, void *va UNUSED)
 {
+	/* pg_round_down() 으로 va의 페이지 번호를 얻음 -> va가 속한 페이지의 시작 주소를 알기위해서
+	 * hash_find() 함수를 사용해서 hash_elem 구조체 얻음
+	 * 만약 존재하지 않는다면 null 리턴
+	 * hash_entry()로 해당 hash_elem의 page 구조체 리턴*/
 	struct page *page = NULL;
+
 	/* TODO: Fill this function. */
+	struct page page_to_compare_va;
+	va = pg_round_down(va);
+	page_to_compare_va.va = va;
+
+	struct hash_elem *hash_elem = hash_find(&spt->hash_table, &page_to_compare_va.hash_elem);
+	if (hash_elem != NULL)
+	{
+		page = hash_entry(hash_elem, struct page, hash_elem);
+	}
 
 	return page;
 }
@@ -80,6 +96,13 @@ bool spt_insert_page(struct supplemental_page_table *spt UNUSED,
 {
 	int succ = false;
 	/* TODO: Fill this function. */
+	struct hash_elem *hash_elem = hash_insert(spt, page->hash_elem);
+	// null 포인터를 반환한 경우 해시테이블에 페이지를 삽입한다.
+	// 이미 요소가 있는 경우 페이지를 삽입하지 않고, 이미 존재하는 요소 반환
+	if (hash_elem == NULL)
+	{
+		succ = true;
+	}
 
 	return succ;
 }
@@ -121,6 +144,18 @@ vm_get_frame(void)
 	struct frame *frame = NULL;
 	/* TODO: Fill this function. */
 
+	// unchecked : par_zero를 해줘야하는지 확실하진 않음.
+	void *paddr = palloc_get_page(PAL_USER);
+
+	// 메모리가 꽉찼을 경우 swap out을 처리해줘야하지만 일단 panic(todo)로 케이스만 표시하고 넘어감.
+	if (paddr == NULL)
+	{
+		PANIC("todo");
+	}
+
+	frame = (frame *)malloc(sizeof(struct frame)); // 프레임 할당
+	frame->kva = paddr;							   // 프레임 구조체 초기화
+
 	ASSERT(frame != NULL);
 	ASSERT(frame->page == NULL);
 	return frame;
@@ -159,10 +194,19 @@ void vm_dealloc_page(struct page *page)
 }
 
 /* Claim the page that allocate on VA. */
+// va가 할당된 페이지에 프레임을 할당하는 함수
 bool vm_claim_page(void *va UNUSED)
 {
 	struct page *page = NULL;
 	/* TODO: Fill this function */
+	// unchecked : 확실하지 않음.
+	struct thread *t = thread_current();
+	page = spt_find_page(&t->spt, va);
+
+	if (page == NULL)
+	{
+		return false;
+	}
 
 	return vm_do_claim_page(page);
 }
@@ -178,8 +222,13 @@ vm_do_claim_page(struct page *page)
 	page->frame = frame;
 
 	/* TODO: Insert page table entry to map page's VA to frame's PA. */
+	// MMU 세팅: 가상 주소와 물리 주소를 매핑한 정보를 페이지 테이블에 추가해야한다.
+	// unchecked : 매핑하는 함수가 맞는지 확실친 않음
 
-	return swap_in(page, frame->kva);
+	// unchecked : 기본코드에 적혀있어서 일단 살려놨는데 의도를 모르겠음.
+	// swap_in(page, frame->kva)
+
+	return pml4_set_page(thread_current()->pml4, page->va, frame->kva, page->writable);
 }
 
 /* --------------------------project3 추가 함수 ------------------------------- */
@@ -189,7 +238,7 @@ static bool compare_hash_func(const struct hash_elem *a, const struct hash_elem 
 {
 	/* hash_entry()로 각각의 element에 대한 page 구조체를 얻은 후 vaddr 비교
 	 * a가 b보다 작으면 true
-	 * a가 b보다 크면 false*/
+	 * a가 b보다 크거나 같으면 false*/
 	struct page *page_a = hash_entry(a, struct page, hash_elem);
 	struct page *page_b = hash_entry(b, struct page, hash_elem);
 	return page_a->va < page_b->va;
@@ -212,10 +261,7 @@ void supplemental_page_table_init(struct supplemental_page_table *spt UNUSED)
 {
 	// 해시테이블 초기화 진행
 	// 인자로 get_hash_func, compare_hash_func 함수 사용
-	// bool hash_init(struct hash * h,
-	// 			   hash_hash_func * hash, hash_less_func * less, void *aux);
-
-	hash_init(spt->hash_table, get_hash_func, compare_hash_func, NULL);
+	hash_init(&spt->hash_table, get_hash_func, compare_hash_func, NULL);
 }
 
 /* Copy supplemental page table from src to dst */
