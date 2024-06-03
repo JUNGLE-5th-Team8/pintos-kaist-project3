@@ -49,6 +49,12 @@ struct page
 	struct frame *frame; /* Back reference for frame */
 
 	/* Your implementation */
+	/*------- project3 추가 -------------------------------------*/
+	bool writable;				// true일경우 해당 주소에 write 가능
+	bool is_loaded;				// 물리메모리의 탑재 여부를 알려주는 플래그
+	struct hash_elem hash_elem; // 해시테이블 element
+
+	/*--------------------------------------------------------------*/
 
 	/* Per-type data are binded into the union.
 	 * Each function automatically detects the current union */
@@ -66,8 +72,8 @@ struct page
 /* The representation of "frame" */
 struct frame
 {
-	void *kva;
-	struct page *page;
+	void *kva;		   // 커널 가상 주소
+	struct page *page; // 페이지 구조체를 담기 위한 멤버
 };
 
 /* The function table for page operations.
@@ -93,7 +99,7 @@ struct page_operations
  * All designs up to you for this. */
 struct supplemental_page_table
 {
-	struct hash hash_table; /* 해시 테이블 구성 */
+	struct hash hash_table; // 해시테이블 선언
 };
 
 #include "threads/thread.h"

@@ -6,7 +6,7 @@
 #include <stdint.h>
 #include "threads/interrupt.h"
 #include "threads/synch.h"
-#include "hash.h"
+
 #ifdef VM
 #include "vm/vm.h"
 #endif
