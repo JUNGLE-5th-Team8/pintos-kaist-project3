@@ -913,6 +913,12 @@ install_page(void *upage, void *kpage, bool writable)
 /* From here, codes will be used after project 3.
  * If you want to implement the function for only project 2, implement it on the
  * upper block. */
+struct auxillary
+{
+	struct file *file;
+	size_t prb;
+	size_t pzb;
+}
 
 static bool
 lazy_load_segment(struct page *page, void *aux)
@@ -920,6 +926,28 @@ lazy_load_segment(struct page *page, void *aux)
 	/* TODO: Load the segment from the file */
 	/* TODO: This called when the first page fault occurs on address VA. */
 	/* TODO: VA is available when calling this function. */
+
+	/* 페이지 확인 */
+	if (page == NULL)
+		return false;
+
+	/* aux로 전달받은 변수 */
+	struct file *file = aux->file;
+	size_t page_read_bytes = aux->prb;
+	size_t page_zero_bytes = aux->pzb;
+
+	/* 할당된 페이지에 로드 */
+	if (file_read(file, kpage, page_read_bytes) != (int)page_read_bytes)
+	{
+		return false;
+	}
+
+	/* 페이지의 남은 부분을 0으로 채우기 */
+	memset(kpage + page_read_bytes, 0, page_zero_bytes);
+
+	/* aux 동적할당 해제 */
+	free(aux);
+	return true;
 }
 
 /* Loads a segment starting at offset OFS in FILE at address
@@ -953,7 +981,12 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 		size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
 		/* TODO: Set up aux to pass information to the lazy_load_segment. */
-		void *aux = NULL;
+		struct auxillary *tmp = malloc(sizeof(struct auxillary));
+		tmp->file = file;
+		tmp->prb = page_read_bytes;
+		tmp->pzb = page_zero_bytes;
+		void *aux = tmp;
+
 		if (!vm_alloc_page_with_initializer(VM_ANON, upage,
 											writable, lazy_load_segment, aux))
 			return false;

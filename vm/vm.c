@@ -62,12 +62,9 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
 
 		// uint64_t *kva = palloc_get_page(PAL_USER | PAL_ZERO);
 
-		struct page *new_page = calloc(sizeof(struct page *), 1);
+		struct page *new_page = malloc(sizeof(struct page));
 
-		if (new_page == NULL)
-			return false;
-
-		uninit_new(upage, new_page, init, type, aux, anon_initializer);
+		uninit_new(new_page, upage, init, type, aux, anon_initializer);
 
 		/* Insert the page into the spt. */
 		if (spt_insert_page(spt, upage))
@@ -237,9 +234,8 @@ vm_do_claim_page(struct page *page)
 	// unchecked : 매핑하는 함수가 맞는지 확실친 않음
 
 	// unchecked : 기본코드에 적혀있어서 일단 살려놨는데 의도를 모르겠음.
-	// swap_in(page, frame->kva)
-
-	return pml4_set_page(thread_current()->pml4, page->va, frame->kva, page->writable);
+	pml4_set_page(thread_current()->pml4, page->va, frame->kva, page->writable);
+	return swap_in(page, frame->kva);
 }
 
 /* --------------------------project3 추가 함수 ------------------------------- */
