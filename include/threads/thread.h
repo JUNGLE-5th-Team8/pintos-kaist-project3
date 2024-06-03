@@ -6,6 +6,7 @@
 #include <stdint.h>
 #include "threads/interrupt.h"
 #include "threads/synch.h"
+#include "hash.h"
 #ifdef VM
 #include "vm/vm.h"
 #endif
@@ -22,7 +23,7 @@ enum thread_status
 /* Thread identifier type.
    You can redefine this to whatever type you like. */
 typedef int tid_t;
-#define TID_ERROR ((tid_t) - 1) /* Error value for tid_t. */
+#define TID_ERROR ((tid_t)-1) /* Error value for tid_t. */
 
 /* Thread priorities. */
 #define PRI_MIN 0	   /* Lowest priority. */
@@ -169,6 +170,9 @@ struct thread
 
 	struct file *run_file;						// 현재 스레드의 실행중인 파일을 저장할 필드
 	int exit_status; /* 프로세스의 종료 상태 */ // _exit(), _wait() 구현 때 사용
+
+	/* 해시테이블로 vme 관리 */
+	struct hash vm;
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
