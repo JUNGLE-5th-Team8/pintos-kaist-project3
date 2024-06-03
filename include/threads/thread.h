@@ -171,9 +171,6 @@ struct thread
 	struct file *run_file;						// 현재 스레드의 실행중인 파일을 저장할 필드
 	int exit_status; /* 프로세스의 종료 상태 */ // _exit(), _wait() 구현 때 사용
 
-	/* 해시테이블로 vme 관리 */
-	struct hash vm;
-
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4; /* Page map level 4 */

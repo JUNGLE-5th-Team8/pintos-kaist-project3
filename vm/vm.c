@@ -60,7 +60,18 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
 		 * TODO: and then create "uninit" page struct by calling uninit_new. You
 		 * TODO: should modify the field after calling the uninit_new. */
 
-		/* TODO: Insert the page into the spt. */
+		// uint64_t *kva = palloc_get_page(PAL_USER | PAL_ZERO);
+
+		struct page *new_page = calloc(sizeof(struct page *), 1);
+
+		if (new_page == NULL)
+			return false;
+
+		uninit_new(upage, new_page, init, type, aux, anon_initializer);
+
+		/* Insert the page into the spt. */
+		if (spt_insert_page(spt, upage))
+			return true;
 	}
 err:
 	return false;
@@ -249,7 +260,7 @@ static uint64_t get_hash_func(const struct hash_elem *e, void *aux)
 {
 	/* hash_entry()로 각각의 element에 대한 page 구조체 검색
 	 * hash_int()를 이용해서 page의 멤버 vaddr에 대한 해시값을 구하고 반환*/
-	struct page *page_a = hash_entry(a, struct page, hash_elem);
+	struct page *page_a = hash_entry(e, struct page, hash_elem);
 	uint64_t hash_value = hash_int(page_a->va);
 	return hash_value;
 }
