@@ -918,7 +918,7 @@ struct auxillary
 	struct file *file;
 	size_t prb;
 	size_t pzb;
-}
+};
 
 static bool
 lazy_load_segment(struct page *page, void *aux)
@@ -932,18 +932,19 @@ lazy_load_segment(struct page *page, void *aux)
 		return false;
 
 	/* aux로 전달받은 변수 */
-	struct file *file = aux->file;
-	size_t page_read_bytes = aux->prb;
-	size_t page_zero_bytes = aux->pzb;
+	struct auxillary *auxi = aux;
+	struct file *file = auxi->file;
+	size_t page_read_bytes = auxi->prb;
+	size_t page_zero_bytes = auxi->pzb;
 
 	/* 할당된 페이지에 로드 */
-	if (file_read(file, kpage, page_read_bytes) != (int)page_read_bytes)
+	if (file_read(file, page, page_read_bytes) != (int)page_read_bytes)
 	{
 		return false;
 	}
 
 	/* 페이지의 남은 부분을 0으로 채우기 */
-	memset(kpage + page_read_bytes, 0, page_zero_bytes);
+	memset(page + page_read_bytes, 0, page_zero_bytes);
 
 	/* aux 동적할당 해제 */
 	free(aux);

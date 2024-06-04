@@ -104,7 +104,7 @@ bool spt_insert_page(struct supplemental_page_table *spt UNUSED,
 {
 	int succ = false;
 	/* TODO: Fill this function. */
-	struct hash_elem *hash_elem = hash_insert(spt, page->hash_elem);
+	struct hash_elem *hash_elem = hash_insert(spt, &page->hash_elem);
 	// null 포인터를 반환한 경우 해시테이블에 페이지를 삽입한다.
 	// 이미 요소가 있는 경우 페이지를 삽입하지 않고, 이미 존재하는 요소 반환
 	if (hash_elem == NULL)
@@ -161,8 +161,8 @@ vm_get_frame(void)
 		PANIC("todo");
 	}
 
-	frame = (frame *)malloc(sizeof(struct frame)); // 프레임 할당
-	frame->kva = paddr;							   // 프레임 구조체 초기화
+	frame = (struct frame *)malloc(sizeof(struct frame)); // 프레임 할당
+	frame->kva = paddr;									  // 프레임 구조체 초기화
 
 	ASSERT(frame != NULL);
 	ASSERT(frame->page == NULL);
@@ -189,6 +189,13 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 	struct page *page = NULL;
 	/* TODO: Validate the fault */
 	/* TODO: Your code goes here */
+
+	page = spt_find_page(spt, addr);
+	if (page == NULL)
+	{
+		printf("페이지를 찾을 수 없음\n");
+		return false;
+	}
 
 	return vm_do_claim_page(page);
 }
