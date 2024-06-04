@@ -6,6 +6,7 @@
 #include "include/lib/kernel/hash.h"
 #include "include/threads/vaddr.h"
 #include "include/threads/mmu.h"
+#include "vm/uninit.h"
 
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
@@ -45,10 +46,11 @@ static struct frame *vm_evict_frame(void);
 /* Create the pending page object with initializer. If you want to create a
  * page, do not create it directly and make it through this function or
  * `vm_alloc_page`. */
+// pending page = 아직 메모리에 로드되지 않았지만 곧 사용될 페이지
+// 페이지를 생성하고자 할때 vm_alloc_page 사용해야함.
 bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writable,
 									vm_initializer *init, void *aux)
 {
-
 	ASSERT(VM_TYPE(type) != VM_UNINIT)
 
 	struct supplemental_page_table *spt = &thread_current()->spt;
@@ -59,9 +61,18 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
 		/* TODO: Create the page, fetch the initialier according to the VM type,
 		 * TODO: and then create "uninit" page struct by calling uninit_new. You
 		 * TODO: should modify the field after calling the uninit_new. */
-
 		/* TODO: Insert the page into the spt. */
+		struct page *page = malloc(sizeof(struct page));
+
+		uninit_new(page, upage, init, type, aux, anon_initializer);
+		page->writable = writable;
+		if (spt_insert_page(spt, page))
+		{
+
+			return true;
+		}
 	}
+
 err:
 	return false;
 }
@@ -96,7 +107,7 @@ bool spt_insert_page(struct supplemental_page_table *spt UNUSED,
 {
 	int succ = false;
 	/* TODO: Fill this function. */
-	struct hash_elem *hash_elem = hash_insert(spt, page->hash_elem);
+	struct hash_elem *hash_elem = hash_insert(spt, &page->hash_elem);
 	// null 포인터를 반환한 경우 해시테이블에 페이지를 삽입한다.
 	// 이미 요소가 있는 경우 페이지를 삽입하지 않고, 이미 존재하는 요소 반환
 	if (hash_elem == NULL)
@@ -145,7 +156,7 @@ vm_get_frame(void)
 	/* TODO: Fill this function. */
 
 	// unchecked : par_zero를 해줘야하는지 확실하진 않음.
-	void *paddr = palloc_get_page(PAL_USER);
+	void *paddr = palloc_get_page(PAL_USER | PAL_ZERO);
 
 	// 메모리가 꽉찼을 경우 swap out을 처리해줘야하지만 일단 panic(todo)로 케이스만 표시하고 넘어감.
 	if (paddr == NULL)
@@ -153,8 +164,9 @@ vm_get_frame(void)
 		PANIC("todo");
 	}
 
-	frame = (frame *)malloc(sizeof(struct frame)); // 프레임 할당
-	frame->kva = paddr;							   // 프레임 구조체 초기화
+	frame = malloc(sizeof(struct frame)); // 프레임 할당
+	frame->kva = paddr;					  // 프레임 구조체 초기화
+	frame->page = NULL;
 
 	ASSERT(frame != NULL);
 	ASSERT(frame->page == NULL);
@@ -181,8 +193,35 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 	struct page *page = NULL;
 	/* TODO: Validate the fault */
 	/* TODO: Your code goes here */
+	// printf("페이지폴트핸들러 fault addr:%p\n", addr); // debug
 
-	return vm_do_claim_page(page);
+	if (!is_user_vaddr(addr) || addr == NULL)
+	{
+		// printf("유효하지 않은 주소 접근 찐 page fault!\n"); // debug
+		return false; // 주소가 유저 공간이 아니면 실패
+	}
+
+	page = spt_find_page(spt, addr);
+	if (page == NULL)
+	{
+		return false; // 페이지를 찾을 수 없으면 실패
+	}
+
+	if (!not_present && !user)
+	{
+		return false;
+	}
+
+	if (vm_do_claim_page(page))
+	{
+		// printf("do claim 성공\n"); //debug
+		return true;
+	}
+	else
+	{
+		// printf("do claim 실패\n"); //debug
+		return false;
+	}
 }
 
 /* Free the page.
@@ -207,7 +246,6 @@ bool vm_claim_page(void *va UNUSED)
 	{
 		return false;
 	}
-
 	return vm_do_claim_page(page);
 }
 
@@ -223,12 +261,10 @@ vm_do_claim_page(struct page *page)
 
 	/* TODO: Insert page table entry to map page's VA to frame's PA. */
 	// MMU 세팅: 가상 주소와 물리 주소를 매핑한 정보를 페이지 테이블에 추가해야한다.
-	// unchecked : 매핑하는 함수가 맞는지 확실친 않음
 
-	// unchecked : 기본코드에 적혀있어서 일단 살려놨는데 의도를 모르겠음.
-	// swap_in(page, frame->kva)
+	pml4_set_page(thread_current()->pml4, page->va, frame->kva, page->writable);
 
-	return pml4_set_page(thread_current()->pml4, page->va, frame->kva, page->writable);
+	return swap_in(page, frame->kva);
 }
 
 /* --------------------------project3 추가 함수 ------------------------------- */
@@ -249,7 +285,7 @@ static uint64_t get_hash_func(const struct hash_elem *e, void *aux)
 {
 	/* hash_entry()로 각각의 element에 대한 page 구조체 검색
 	 * hash_int()를 이용해서 page의 멤버 vaddr에 대한 해시값을 구하고 반환*/
-	struct page *page_a = hash_entry(a, struct page, hash_elem);
+	struct page *page_a = hash_entry(e, struct page, hash_elem);
 	uint64_t hash_value = hash_int(page_a->va);
 	return hash_value;
 }

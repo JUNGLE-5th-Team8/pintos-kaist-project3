@@ -2,6 +2,7 @@
 #define VM_VM_H
 #include <stdbool.h>
 #include "threads/palloc.h"
+#include "include/lib/kernel/hash.h"
 
 enum vm_type
 {
@@ -20,7 +21,7 @@ enum vm_type
 	 * markers, until the value is fit in the int. */
 	VM_MARKER_0 = (1 << 3),
 	VM_MARKER_1 = (1 << 4),
-
+	VM_STACK = (1 << 5), // 스택 페이지를 나타내는 마커 추가
 	/* DO NOT EXCEED THIS VALUE. */
 	VM_MARKER_END = (1 << 31),
 };
@@ -51,6 +52,7 @@ struct page
 	/*------- project3 추가 -------------------------------------*/
 	bool writable;				// true일경우 해당 주소에 write 가능
 	bool is_loaded;				// 물리메모리의 탑재 여부를 알려주는 플래그
+	enum vm_type is_stack;		// 스택 페이지 확인 플래그
 	struct hash_elem hash_elem; // 해시테이블 element
 
 	/*--------------------------------------------------------------*/
