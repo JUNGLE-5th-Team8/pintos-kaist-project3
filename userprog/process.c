@@ -340,7 +340,11 @@ int process_exec(void *f_name)
 	_if.R.rdi = argc;
 
 	// 유저 스택 메모리 확인 (디버깅용)
-	hex_dump(_if.rsp, _if.rsp, USER_STACK - (uint64_t)_if.rsp, true); /* 유저 스택의 내용을 16진수로 출력합니다 */
+	// printf("rax : %d\n", _if.R.rax);
+	// printf("rdi : %d\n", _if.R.rdi);
+	// printf("rsi : %p\n", _if.R.rsi);
+	// printf("rsp : %p\n", _if.rsp);
+	// hex_dump(_if.rsp, _if.rsp, USER_STACK - (uint64_t)_if.rsp, true); /* 유저 스택의 내용을 16진수로 출력합니다 */
 
 	/* 페이지 할당 해제 */
 	palloc_free_page(file_name);
@@ -938,7 +942,7 @@ lazy_load_segment(struct page *page, void *aux)
 	/* TODO: This called when the first page fault occurs on address VA. */
 	/* TODO: VA is available when calling this function. */
 
-	// printf("\nlazy_load_segment 시작 \n"); /* Debug */
+	// printf("lazy_load_segment 시작 \n"); /* Debug */
 	/* 페이지 확인 */
 	if (page == NULL)
 	{
@@ -956,7 +960,7 @@ lazy_load_segment(struct page *page, void *aux)
 	file_seek(file, ofs);
 
 	/* 할당된 페이지에 로드 */
-	if (file_read(file, page->frame->kva, page_read_bytes) != (int)page_read_bytes)
+	if (file_read(file, page->frame->kva, page_read_bytes) != (off_t)page_read_bytes)
 	{
 		// printf("file_read 실패 \n"); /* Debug */
 		return false;
@@ -1016,7 +1020,7 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 		/* Advance. */
 		read_bytes -= page_read_bytes;
 		zero_bytes -= page_zero_bytes;
-		ofs += read_bytes;
+		ofs += page_read_bytes;
 		upage += PGSIZE;
 	}
 	return true;
@@ -1034,11 +1038,11 @@ setup_stack(struct intr_frame *if_)
 	 * TODO: You should mark the page is stack. */
 	/* TODO: Your code goes here */
 
-	success = vm_alloc_page(VM_MARKER_0 | VM_ANON, stack_bottom, true);
-	if (success)
+	if (vm_alloc_page(VM_MARKER_0 | VM_ANON, stack_bottom, true))
 	{
 		// printf("vm_alloc_page stack 성공\nstack_pointer : %p\n\n", USER_STACK); /* Debug */
-		if (vm_claim_page(stack_bottom))
+		success = vm_claim_page(stack_bottom);
+		if (success)
 			if_->rsp = USER_STACK;
 	}
 	return success;

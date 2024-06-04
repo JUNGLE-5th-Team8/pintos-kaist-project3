@@ -201,7 +201,7 @@ vm_handle_wp(struct page *page UNUSED)
 bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 						 bool user UNUSED, bool write UNUSED, bool not_present UNUSED)
 {
-	printf("pagefault 발생 addr : %p\n", addr); /* Debug */
+	// printf("\npagefault 발생 addr : %p\n", addr); /* Debug */
 	struct supplemental_page_table *spt UNUSED = &thread_current()->spt;
 	struct page *page = NULL;
 	/* TODO: Validate the fault */
@@ -230,7 +230,7 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 
 	if (vm_do_claim_page(page))
 	{
-		printf("vm_do_claim 성공\n"); /* Debug */
+		// printf("vm_do_claim 성공\n"); /* Debug */
 		return true;
 	}
 	else
@@ -271,11 +271,11 @@ static bool
 vm_do_claim_page(struct page *page)
 {
 	// printf("vm_do_claim_page 시작 \npage_type : %d\n", page->uninit.type); /* Debug */
-	// struct frame *frame = vm_get_frame();
+	struct frame *frame = vm_get_frame();
 
 	/* Set links */
-	page->frame = vm_get_frame();
-	page->frame->page = page;
+	page->frame = frame;
+	frame->page = page;
 
 	/* TODO: Insert page table entry to map page's VA to frame's PA. */
 	// MMU 세팅: 가상 주소와 물리 주소를 매핑한 정보를 페이지 테이블에 추가해야한다.
@@ -284,8 +284,8 @@ vm_do_claim_page(struct page *page)
 	// unchecked : 기본코드에 적혀있어서 일단 살려놨는데 의도를 모르겠음.
 	if (pml4_set_page(thread_current()->pml4, page->va, page->frame->kva, page->writable))
 	{
-		printf("pml4_set_page 성공\n"); /* Debug */
-										// printf("page->va : %p\npage->frame->kva : %p\n\n", page->va, page->frame->kva);/* Debug */
+		// printf("pml4_set_page 성공\n"); /* Debug */
+		// printf("page->va : %p\npage->frame->kva : %p\n\n", page->va, page->frame->kva);/* Debug */
 	}
 	return swap_in(page, page->frame->kva);
 }

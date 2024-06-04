@@ -73,15 +73,15 @@ void syscall_init(void)
 void syscall_handler(struct intr_frame *f UNUSED)
 {
 	// TODO: Your implementation goes here.
-	printf("\npid : %d \n", thread_current()->tid);
-	printf("system call number : %d\n", f->R.rax);
-	printf("f->rdi : %d\n", f->R.rdi);
-	printf("f->rsi : %s\n", f->R.rsi);
-	printf("f->rdx : %d\n", f->R.rdx);
-	printf("f->r10 : %d\n", f->R.r10);
-	printf("f->r8 : %d\n", f->R.r8);
-	printf("f->r9 : %d\n", f->R.r9);
-	printf("f->rsp : %p\n", f->rsp);
+	// printf("\npid : %d \n", thread_current()->tid);
+	// printf("system call number : %d\n", f->R.rax);
+	// printf("f->rdi : %d\n", f->R.rdi);
+	// printf("f->rsi : %s\n", f->R.rsi);
+	// printf("f->rdx : %d\n", f->R.rdx);
+	// printf("f->r10 : %d\n", f->R.r10);
+	// printf("f->r8 : %d\n", f->R.r8);
+	// printf("f->r9 : %d\n", f->R.r9);
+	// printf("f->rsp : %p\n", f->rsp);
 
 	// hex_dump(f->rsp, f->rsp, USER_STACK, true); // 무슨 인자가 넘어오는지 궁금
 
