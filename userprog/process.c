@@ -340,10 +340,11 @@ int process_exec(void *f_name)
 	_if.R.rdi = argc;
 
 	// 유저 스택 메모리 확인 (디버깅용)
-	// hex_dump(_if.rsp, _if.rsp, USER_STACK - (uint64_t)_if.rsp, true); /* 유저 스택의 내용을 16진수로 출력합니다 */
+	hex_dump(_if.rsp, _if.rsp, USER_STACK - (uint64_t)_if.rsp, true); /* 유저 스택의 내용을 16진수로 출력합니다 */
 
 	/* 페이지 할당 해제 */
 	palloc_free_page(file_name);
+	// printf("로드 성공... !!\n"); /* Debug */
 
 	/* Start switched process. */ /* 프로세스를 시작합니다. */
 	// printf("프로세스 시작 ! Starting switched process\n"); /* Debug */
@@ -732,17 +733,26 @@ load(const char *file_name, struct intr_frame *if_)
 				}
 				if (!load_segment(file, file_page, (void *)mem_page,
 								  read_bytes, zero_bytes, writable))
+				{
+					// printf("load_segment 실패\n\n"); /* Debug */
 					goto done;
+				}
 			}
 			else
+			{
+				// printf("validate_segment 실패\n\n"); /* Debug */
 				goto done;
+			}
 			break;
 		}
 	}
 
 	/* Set up stack. */
 	if (!setup_stack(if_)) // user stack 초기화
+	{
+		// printf("setup_stack 실패 \n\n"); /* Debug */
 		goto done;
+	}
 
 	/* Start address. */
 	if_->rip = ehdr.e_entry; // entry point 초기화
@@ -918,6 +928,7 @@ struct auxillary
 	struct file *file;
 	size_t prb;
 	size_t pzb;
+	off_t ofs;
 };
 
 static bool
@@ -927,26 +938,35 @@ lazy_load_segment(struct page *page, void *aux)
 	/* TODO: This called when the first page fault occurs on address VA. */
 	/* TODO: VA is available when calling this function. */
 
+	// printf("\nlazy_load_segment 시작 \n"); /* Debug */
 	/* 페이지 확인 */
 	if (page == NULL)
+	{
+		// printf("page 가 null임\n"); /* Debug */
 		return false;
+	}
 
 	/* aux로 전달받은 변수 */
 	struct auxillary *auxi = aux;
 	struct file *file = auxi->file;
 	size_t page_read_bytes = auxi->prb;
 	size_t page_zero_bytes = auxi->pzb;
+	off_t ofs = auxi->ofs;
+
+	file_seek(file, ofs);
 
 	/* 할당된 페이지에 로드 */
-	if (file_read(file, page, page_read_bytes) != (int)page_read_bytes)
+	if (file_read(file, page->frame->kva, page_read_bytes) != (int)page_read_bytes)
 	{
+		// printf("file_read 실패 \n"); /* Debug */
 		return false;
 	}
 
 	/* 페이지의 남은 부분을 0으로 채우기 */
-	memset(page + page_read_bytes, 0, page_zero_bytes);
+	memset(page->frame->kva + page_read_bytes, 0, page_zero_bytes);
 
 	/* aux 동적할당 해제 */
+	// printf("load 완료\n"); /* Debug */
 	free(aux);
 	return true;
 }
@@ -986,6 +1006,7 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 		tmp->file = file;
 		tmp->prb = page_read_bytes;
 		tmp->pzb = page_zero_bytes;
+		tmp->ofs = ofs;
 		void *aux = tmp;
 
 		if (!vm_alloc_page_with_initializer(VM_ANON, upage,
@@ -995,6 +1016,7 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 		/* Advance. */
 		read_bytes -= page_read_bytes;
 		zero_bytes -= page_zero_bytes;
+		ofs += read_bytes;
 		upage += PGSIZE;
 	}
 	return true;
@@ -1012,6 +1034,13 @@ setup_stack(struct intr_frame *if_)
 	 * TODO: You should mark the page is stack. */
 	/* TODO: Your code goes here */
 
+	success = vm_alloc_page(VM_MARKER_0 | VM_ANON, stack_bottom, true);
+	if (success)
+	{
+		// printf("vm_alloc_page stack 성공\nstack_pointer : %p\n\n", USER_STACK); /* Debug */
+		if (vm_claim_page(stack_bottom))
+			if_->rsp = USER_STACK;
+	}
 	return success;
 }
 #endif /* VM */

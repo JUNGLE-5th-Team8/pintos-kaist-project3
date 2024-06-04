@@ -23,6 +23,7 @@ void vm_file_init(void)
 bool file_backed_initializer(struct page *page, enum vm_type type, void *kva)
 {
 	/* Set up the handler */
+	// printf("start file_backed_initializer\n"); /* Debug */
 	page->operations = &file_ops;
 
 	struct file_page *file_page = &page->file;

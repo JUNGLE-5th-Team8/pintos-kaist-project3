@@ -48,6 +48,10 @@ static struct frame *vm_evict_frame(void);
 bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writable,
 									vm_initializer *init, void *aux)
 {
+	// printf("\nvm_alloc_page_with_initializer 시작 \n"); /* Debug */
+	// printf("vm_type : %d\n", type);						/* Debug */
+	// printf("upage : %p\n", upage);						/* Debug */
+	// printf("writable : %d\n\n", writable);				/* Debug */
 
 	ASSERT(VM_TYPE(type) != VM_UNINIT)
 
@@ -60,15 +64,19 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
 		 * TODO: and then create "uninit" page struct by calling uninit_new. You
 		 * TODO: should modify the field after calling the uninit_new. */
 
-		// uint64_t *kva = palloc_get_page(PAL_USER | PAL_ZERO);
-
 		struct page *new_page = malloc(sizeof(struct page));
 
 		uninit_new(new_page, upage, init, type, aux, anon_initializer);
 
+		// printf("uninit page 구조체 생성 : %p\n", upage); /* Debug */
+		new_page->writable = writable;
+
 		/* Insert the page into the spt. */
-		if (spt_insert_page(spt, upage))
+		if (spt_insert_page(spt, new_page))
+		{
+			// printf("spt 에 uninit page구조체 삽입 성공\n\n"); /* Debug */
 			return true;
+		}
 	}
 err:
 	return false;
@@ -89,10 +97,17 @@ spt_find_page(struct supplemental_page_table *spt UNUSED, void *va UNUSED)
 	va = pg_round_down(va);
 	page_to_compare_va.va = va;
 
+	// printf("비교할 페이지 구조체 생성 va: %p\n", va); /* Debug */
+
 	struct hash_elem *hash_elem = hash_find(&spt->hash_table, &page_to_compare_va.hash_elem);
 	if (hash_elem != NULL)
 	{
+		// printf("spt에 hash_elem이 있음\n\n"); /* Debug */
 		page = hash_entry(hash_elem, struct page, hash_elem);
+	}
+	else
+	{
+		// printf("spt에 hash_elem이 없음\n\n"); /* Debug */
 	}
 
 	return page;
@@ -104,14 +119,14 @@ bool spt_insert_page(struct supplemental_page_table *spt UNUSED,
 {
 	int succ = false;
 	/* TODO: Fill this function. */
-	struct hash_elem *hash_elem = hash_insert(spt, &page->hash_elem);
+	struct hash_elem *hash_elem = hash_insert(&spt->hash_table, &page->hash_elem);
 	// null 포인터를 반환한 경우 해시테이블에 페이지를 삽입한다.
 	// 이미 요소가 있는 경우 페이지를 삽입하지 않고, 이미 존재하는 요소 반환
 	if (hash_elem == NULL)
 	{
 		succ = true;
 	}
-
+	// printf("spt insert page 에서 spt에 hash_elem 삽입 성공(1) 실패(0) : %d\n", succ); /* Debug */
 	return succ;
 }
 
@@ -153,7 +168,7 @@ vm_get_frame(void)
 	/* TODO: Fill this function. */
 
 	// unchecked : par_zero를 해줘야하는지 확실하진 않음.
-	void *paddr = palloc_get_page(PAL_USER);
+	void *paddr = palloc_get_page(PAL_USER | PAL_ZERO);
 
 	// 메모리가 꽉찼을 경우 swap out을 처리해줘야하지만 일단 panic(todo)로 케이스만 표시하고 넘어감.
 	if (paddr == NULL)
@@ -163,6 +178,7 @@ vm_get_frame(void)
 
 	frame = (struct frame *)malloc(sizeof(struct frame)); // 프레임 할당
 	frame->kva = paddr;									  // 프레임 구조체 초기화
+	frame->page = NULL;
 
 	ASSERT(frame != NULL);
 	ASSERT(frame->page == NULL);
@@ -185,19 +201,43 @@ vm_handle_wp(struct page *page UNUSED)
 bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 						 bool user UNUSED, bool write UNUSED, bool not_present UNUSED)
 {
+	printf("pagefault 발생 addr : %p\n", addr); /* Debug */
 	struct supplemental_page_table *spt UNUSED = &thread_current()->spt;
 	struct page *page = NULL;
 	/* TODO: Validate the fault */
 	/* TODO: Your code goes here */
 
-	page = spt_find_page(spt, addr);
-	if (page == NULL)
+	/* user가 kernel영역에 접근한 경우 */
+	if (user && is_kernel_vaddr(addr))
 	{
-		printf("페이지를 찾을 수 없음\n");
+		// printf("유저가 커널영역에 접근\n"); /* Debug */
 		return false;
 	}
 
-	return vm_do_claim_page(page);
+	page = spt_find_page(spt, addr);
+	if (page == NULL)
+	{
+		// printf("페이지를 찾을 수 없음\n"); /* Debug */
+		return false;
+	}
+
+	/* read-only에 write시도 */
+	if (write && !page->writable)
+	{
+		// printf("read-only에 write시도\n"); /* Debug */
+		return false;
+	}
+
+	if (vm_do_claim_page(page))
+	{
+		printf("vm_do_claim 성공\n"); /* Debug */
+		return true;
+	}
+	else
+	{
+		// printf("do_claim 실패\n"); /* Debug */
+		return false;
+	}
 }
 
 /* Free the page.
@@ -230,19 +270,24 @@ bool vm_claim_page(void *va UNUSED)
 static bool
 vm_do_claim_page(struct page *page)
 {
-	struct frame *frame = vm_get_frame();
+	// printf("vm_do_claim_page 시작 \npage_type : %d\n", page->uninit.type); /* Debug */
+	// struct frame *frame = vm_get_frame();
 
 	/* Set links */
-	frame->page = page;
-	page->frame = frame;
+	page->frame = vm_get_frame();
+	page->frame->page = page;
 
 	/* TODO: Insert page table entry to map page's VA to frame's PA. */
 	// MMU 세팅: 가상 주소와 물리 주소를 매핑한 정보를 페이지 테이블에 추가해야한다.
 	// unchecked : 매핑하는 함수가 맞는지 확실친 않음
 
 	// unchecked : 기본코드에 적혀있어서 일단 살려놨는데 의도를 모르겠음.
-	pml4_set_page(thread_current()->pml4, page->va, frame->kva, page->writable);
-	return swap_in(page, frame->kva);
+	if (pml4_set_page(thread_current()->pml4, page->va, page->frame->kva, page->writable))
+	{
+		printf("pml4_set_page 성공\n"); /* Debug */
+										// printf("page->va : %p\npage->frame->kva : %p\n\n", page->va, page->frame->kva);/* Debug */
+	}
+	return swap_in(page, page->frame->kva);
 }
 
 /* --------------------------project3 추가 함수 ------------------------------- */

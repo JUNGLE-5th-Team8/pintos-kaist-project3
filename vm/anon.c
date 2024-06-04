@@ -28,6 +28,7 @@ void vm_anon_init(void)
 bool anon_initializer(struct page *page, enum vm_type type, void *kva)
 {
 	/* Set up the handler */
+	// printf("start anon_initializer\n"); /* Debug */
 	page->operations = &anon_ops;
 
 	struct anon_page *anon_page = &page->anon;
@@ -37,6 +38,7 @@ bool anon_initializer(struct page *page, enum vm_type type, void *kva)
 static bool
 anon_swap_in(struct page *page, void *kva)
 {
+	// printf("start anon_swap_in\n"); /* Debug */
 	struct anon_page *anon_page = &page->anon;
 }
 
