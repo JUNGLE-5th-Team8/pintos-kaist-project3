@@ -66,7 +66,15 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
 
 		struct page *new_page = malloc(sizeof(struct page));
 
-		uninit_new(new_page, upage, init, type, aux, anon_initializer);
+		switch (VM_TYPE(type))
+		{
+		case VM_ANON:
+			uninit_new(new_page, upage, init, type, aux, anon_initializer);
+			break;
+		case VM_FILE:
+			uninit_new(new_page, upage, init, type, aux, file_backed_initializer);
+			break;
+		}
 
 		// printf("uninit page 구조체 생성 : %p\n", upage); /* Debug */
 		new_page->writable = writable;
