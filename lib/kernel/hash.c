@@ -121,6 +121,7 @@ hash_replace (struct hash *h, struct hash_elem *new) {
    null pointer if no equal element exists in the table. */
 struct hash_elem *
 hash_find (struct hash *h, struct hash_elem *e) {
+	// printf("hash_find!!!!!!!!!!!!!!!!!!!!!!!\n");//debug
 	return find_elem (h, find_bucket (h, e), e);
 }
 
@@ -240,6 +241,7 @@ hash_empty (struct hash *h) {
 #define FNV_64_BASIS 0xcbf29ce484222325UL
 
 /* Returns a hash of the SIZE bytes in BUF. */
+//hash
 uint64_t
 hash_bytes (const void *buf_, size_t size) {
 	/* Fowler-Noll-Vo 32-bit hash, for bytes. */
@@ -279,7 +281,9 @@ hash_int (int i) {
 /* Returns the bucket in H that E belongs in. */
 static struct list *
 find_bucket (struct hash *h, struct hash_elem *e) {
+	// printf("find bucket!!!!!!!!!!!!!!!\n");//debug
 	size_t bucket_idx = h->hash (e, h->aux) & (h->bucket_cnt - 1);
+	// pritnf("bucket!!!!!!!!!!!!!!! %p",&h->buckets[bucket_idx]);//debug
 	return &h->buckets[bucket_idx];
 }
 

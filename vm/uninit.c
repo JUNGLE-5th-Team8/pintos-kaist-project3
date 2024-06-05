@@ -51,11 +51,19 @@ uninit_initialize (struct page *page, void *kva) {
 	vm_initializer *init = uninit->init;
 	void *aux = uninit->aux;
 
+	if(init){
+		if(!init (page, aux)){
+			printf("init 실패\n");
+			return false;
+		}
+	}
+	if(!uninit->page_initializer(page, uninit->type, kva)){
+		printf("page initailize 실패\n");
+		return false;
+	}
 	/* TODO: You may need to fix this function. */
-	return uninit->page_initializer (page, uninit->type, kva) &&
-		(init ? init (page, aux) : true);
+	return true;
 }
-
 /* Free the resources hold by uninit_page. Although most of pages are transmuted
  * to other page objects, it is possible to have uninit pages when the process
  * exit, which are never referenced during the execution.

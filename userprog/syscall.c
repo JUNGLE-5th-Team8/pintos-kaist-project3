@@ -152,6 +152,7 @@ void check_address(void *addr)
 	if (addr == NULL || !is_user_vaddr(addr) || pml4_get_page(thread_current()->pml4, addr) == NULL)
 	{
 		// 잘못된 접근일 경우 프로세스 종료
+		// printf("잘못된 접근!!!!!!!!!!!!\n");
 		exit(-1);
 	}
 }
