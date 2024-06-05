@@ -336,6 +336,7 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 void free_page(struct hash_elem* elem, void *aux){
 	struct page *page_to_del = page_entry_from_hash_elem(elem);
 	destroy(page_to_del);
+	free(page_to_del->frame);
 	free(page_to_del);
 }
 /* Free the resource hold by the supplemental page table */
