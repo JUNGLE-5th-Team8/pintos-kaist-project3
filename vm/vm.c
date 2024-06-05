@@ -360,6 +360,7 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 static void hash_action_clear(struct hash_elem *e, void *aux)
 {
 	struct page *page = hash_entry(e, struct page, hash_elem);
+	free(page->frame);
 	destroy(page);
 	free(page);
 }
