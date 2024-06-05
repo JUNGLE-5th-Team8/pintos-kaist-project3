@@ -396,6 +396,12 @@ int filesize(int fd)
 int read(int fd, void *buffer, unsigned size)
 {
 	check_address(buffer); // 주어진 버퍼 주소가 유효한지 확인합니다.
+	// 버퍼가 읽기 전용이면 종료 -ptr-write-code2
+	if (spt_find_page(&thread_current()->spt, buffer)->writable == false)
+	{
+		exit(-1);
+	}
+
 	off_t read_byte;
 	uint8_t *read_buffer = buffer;
 	if (fd == STDIN_FILENO)
@@ -441,6 +447,7 @@ int read(int fd, void *buffer, unsigned size)
 int write(int fd, const void *buffer, unsigned size)
 {
 	check_address((void *)buffer); // 주어진 버퍼 주소가 유효한지 확인합니다.
+
 	off_t write_byte;
 	if (fd == STDIN_FILENO)
 	{
