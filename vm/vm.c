@@ -6,6 +6,8 @@
 #include "include/lib/kernel/hash.h"
 #include "include/threads/vaddr.h"
 #include "include/threads/mmu.h"
+#include "string.h"
+#include "userprog/process.h"
 
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
@@ -74,10 +76,13 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
 		case VM_FILE:
 			uninit_new(new_page, upage, init, type, aux, file_backed_initializer);
 			break;
+		default:
+			break;
 		}
 
 		// printf("uninit page 구조체 생성 : %p\n", upage); /* Debug */
 		new_page->writable = writable;
+		new_page->is_loaded = false;
 
 		/* Insert the page into the spt. */
 		if (spt_insert_page(spt, new_page))
@@ -222,6 +227,16 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 		return false;
 	}
 
+	/* */
+
+	/* stack overflow로 인해서 발생한 pagefault일 때 */
+	// printf("pg_round_down(f->rsp) : %p\n", pg_round_down(f->rsp));/* Debug */
+	// printf("f->rsp : %p\n", f->rsp);/* Debug */
+	if (pg_round_down(f->rsp - 8))
+	{
+		vm_stack_growth(addr);
+	}
+
 	page = spt_find_page(spt, addr);
 	if (page == NULL)
 	{
@@ -331,10 +346,62 @@ void supplemental_page_table_init(struct supplemental_page_table *spt UNUSED)
 	hash_init(&spt->hash_table, get_hash_func, compare_hash_func, NULL);
 }
 
+bool copy_child(struct page *child, void *aux)
+{
+	// struct page *parent = aux;
+	memcpy(child->frame->kva, aux, PGSIZE);
+	return true;
+}
+
 /* Copy supplemental page table from src to dst */
 bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 								  struct supplemental_page_table *src UNUSED)
 {
+	/* 해시 이터레이터 생성 */
+	struct hash_iterator hi;
+	hash_first(&hi, &src->hash_table);
+
+	/* FIXME: dst에 있는 hash table 정리 */
+	// hash_clear(&dst->hash_table, )
+
+	/* 이터레이터 순회하면서 복사 */
+	struct hash_elem *hash_elem;
+	while ((hash_elem = hash_next(&hi)) != NULL)
+	{
+		/* 부모 페이지 */
+		struct page *old_page = hash_entry(hash_elem, struct page, hash_elem);
+
+		/* 이미 로드된 페이지는 즉시 연결 and 복사 */
+		if (old_page->is_loaded)
+		{
+			vm_alloc_page_with_initializer(old_page->anon.type, old_page->va, old_page->writable,
+										   copy_child, old_page->frame->kva);
+			vm_claim_page(old_page->va);
+		}
+
+		/* 로드 안된 페이지는 lazy_load 되도록 부모에서 복사 */
+		else
+		{
+			/* 부모의 aux 복사 */
+			struct auxillary *aux = malloc(sizeof(struct auxillary));
+
+			/* 부모의 aux가 NULL일때 */
+			if (old_page->uninit.aux == NULL)
+			{
+				free(aux);
+				aux = NULL;
+			}
+			else
+			{
+				memcpy(aux, old_page->uninit.aux, sizeof(struct auxillary));
+			}
+
+			/* 페이지 생성 및 삽입 */
+			vm_alloc_page_with_initializer(old_page->uninit.type, old_page->va, old_page->writable,
+										   old_page->uninit.init, aux);
+		}
+	}
+	return true;
 }
 
 /* Free the resource hold by the supplemental page table */
@@ -342,4 +409,6 @@ void supplemental_page_table_kill(struct supplemental_page_table *spt UNUSED)
 {
 	/* TODO: Destroy all the supplemental_page_table hold by thread and
 	 * TODO: writeback all the modified contents to the storage. */
+
+	// hash_clear(spt->hash_table, hash_action_clear);
 }

@@ -231,7 +231,10 @@ __do_fork(void *aux)
 #ifdef VM
 	supplemental_page_table_init(&current->spt);
 	if (!supplemental_page_table_copy(&current->spt, &parent->spt))
+	{
+		printf("supplemental_page_table_copy 실패ㅜㅜ\n");
 		goto error;
+	}
 #else
 	if (!pml4_for_each(parent->pml4, duplicate_pte, parent))
 		goto error;
@@ -927,13 +930,6 @@ install_page(void *upage, void *kpage, bool writable)
 /* From here, codes will be used after project 3.
  * If you want to implement the function for only project 2, implement it on the
  * upper block. */
-struct auxillary
-{
-	struct file *file;
-	size_t prb;
-	size_t pzb;
-	off_t ofs;
-};
 
 static bool
 lazy_load_segment(struct page *page, void *aux)
@@ -971,7 +967,9 @@ lazy_load_segment(struct page *page, void *aux)
 
 	/* aux 동적할당 해제 */
 	// printf("load 완료\n"); /* Debug */
-	free(aux);
+
+	// FIXME: exit에서 free해줘야함
+	// free(aux);
 	return true;
 }
 

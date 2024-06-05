@@ -27,7 +27,11 @@
         "*.inc": "c",
         "directory.h": "c",
         "filesys.h": "c",
-        "malloc.h": "c"
+        "malloc.h": "c",
+        "mmu.h": "c",
+        "hash.h": "c",
+        "inspect.h": "c",
+        "vm.h": "c"
     },
     "editor.formatOnSave": true,
     "editor.formatOnPaste": true,
