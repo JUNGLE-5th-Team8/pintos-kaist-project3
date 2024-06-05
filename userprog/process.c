@@ -969,7 +969,7 @@ lazy_load_segment(struct page *page, void *aux)
 	// printf("load 완료\n"); /* Debug */
 
 	// FIXME: exit에서 free해줘야함
-	// free(aux);
+	free(aux);
 	return true;
 }
 

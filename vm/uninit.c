@@ -54,6 +54,7 @@ uninit_initialize(struct page *page, void *kva)
 
 	page->is_loaded = true;
 	/* TODO: You may need to fix this function. */
+
 	return (init ? init(page, aux) : true) && uninit->page_initializer(page, uninit->type, kva);
 }
 
@@ -67,4 +68,5 @@ uninit_destroy(struct page *page)
 	struct uninit_page *uninit UNUSED = &page->uninit;
 	/* TODO: Fill this function.
 	 * TODO: If you don't have anything to do, just return. */
+	free(uninit->aux);
 }

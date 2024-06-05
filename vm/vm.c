@@ -232,10 +232,10 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 	/* stack overflow로 인해서 발생한 pagefault일 때 */
 	// printf("pg_round_down(f->rsp) : %p\n", pg_round_down(f->rsp));/* Debug */
 	// printf("f->rsp : %p\n", f->rsp);/* Debug */
-	if (pg_round_down(f->rsp - 8))
-	{
-		vm_stack_growth(addr);
-	}
+	// if (pg_round_down(f->rsp - 8))
+	// {
+	// 	vm_stack_growth(addr);
+	// }
 
 	page = spt_find_page(spt, addr);
 	if (page == NULL)
@@ -397,12 +397,11 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 void hash_action_clear(struct hash_elem *hash_e, void *aux)
 {
 	struct page *page = hash_entry(hash_e, struct page, hash_elem);
-	list_remove(&hash_e->list_elem);
-	// destroy(page);
-	// palloc_free_page(page->frame->kva);
-	// free(page->frame);
-	// free(page->uninit.aux);
-	// free(page);
+	// list_remove(&hash_e->list_elem);
+	destroy(page);
+	// palloc_free_page(page->frame->kva); pml4에서 알아서 해준다고 함
+	free(page->frame);
+	free(page);
 }
 
 /* Free the resource hold by the supplemental page table */

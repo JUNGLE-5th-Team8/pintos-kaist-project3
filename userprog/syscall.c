@@ -157,7 +157,7 @@ void check_address(void *addr)
 {
 	// 포인터가 가리키는 주소가 유저 영역의 주소인지 확인
 	// 주어진 주소가 현재 프로세스의 페이지 테이블에 유효하게 매핑되어 있는지 확인
-	if (addr == NULL || !is_user_vaddr(addr) || pml4_get_page(thread_current()->pml4, addr) == NULL)
+	if (addr == NULL || !is_user_vaddr(addr) || spt_find_page(&thread_current()->spt, addr) == NULL)
 	{
 		// 잘못된 접근일 경우 프로세스 종료
 		exit(-1);
@@ -404,6 +404,10 @@ int filesize(int fd)
 int read(int fd, void *buffer, unsigned size)
 {
 	check_address(buffer); // 주어진 버퍼 주소가 유효한지 확인합니다.
+	/* 버퍼가 할당된 프레임이 writable이 아니면 exit(-1) */
+	if (spt_find_page(&thread_current()->spt, buffer)->writable != true)
+		exit(-1);
+
 	off_t read_byte;
 	uint8_t *read_buffer = buffer;
 	if (fd == STDIN_FILENO)
