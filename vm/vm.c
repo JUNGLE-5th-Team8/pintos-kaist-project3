@@ -7,6 +7,8 @@
 #include "include/threads/vaddr.h"
 #include "include/threads/mmu.h"
 #include "vm/uninit.h"
+#include "include/userprog/process.h"
+#include <string.h>
 
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
@@ -43,6 +45,15 @@ static struct frame *vm_get_victim(void);
 static bool vm_do_claim_page(struct page *page);
 static struct frame *vm_evict_frame(void);
 
+static struct page *page_entry_from_hash_elem(struct hash_elem *supplemental_hash_elem)
+{
+	if (supplemental_hash_elem == NULL)
+	{
+		return NULL;
+	}
+	return hash_entry(supplemental_hash_elem, struct page, hash_elem);
+}
+
 /* Create the pending page object with initializer. If you want to create a
  * page, do not create it directly and make it through this function or
  * `vm_alloc_page`. */
@@ -66,9 +77,9 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
 
 		uninit_new(page, upage, init, type, aux, anon_initializer);
 		page->writable = writable;
+		page->is_loaded = false;
 		if (spt_insert_page(spt, page))
 		{
-
 			return true;
 		}
 	}
@@ -207,10 +218,10 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 		return false; // 페이지를 찾을 수 없으면 실패
 	}
 
-	if (!not_present && !user)
-	{
-		return false;
-	}
+	// if (!not_present && !user)
+	// {
+	// 	return false;
+	// }
 
 	if (write && !page->writable)
 	{
@@ -297,6 +308,14 @@ static uint64_t get_hash_func(const struct hash_elem *e, void *aux)
 
 /*------------------------project3 추가 함수 끝------------------------------*/
 
+static bool
+child_copy_pm(struct page *page, void *aux)
+{
+	page->is_loaded = true;
+	memcpy(page->frame->kva, aux, PGSIZE);
+	return true;
+}
+
 /* Initialize new supplemental page table */
 void supplemental_page_table_init(struct supplemental_page_table *spt UNUSED)
 {
@@ -309,17 +328,40 @@ void supplemental_page_table_init(struct supplemental_page_table *spt UNUSED)
 bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 								  struct supplemental_page_table *src UNUSED)
 {
-	// struct hash_iterator *hi;
-	// hash_first(hi, &src->hash_table); // 해시 이터레이터 초기화
+	struct hash_iterator i;
 
-	// struct hash_elem *cur = hash_next(hi);
+	hash_first(&i, &src->hash_table);
+	while (hash_next(&i))
+	{
+		struct page *page_to_copy = page_entry_from_hash_elem(hash_cur(&i));
+		// 로드된 경우
+		if (page_to_copy->is_loaded)
+		{ // init메모리가 아니라면....
+			vm_alloc_page_with_initializer(page_to_copy->anon.type, page_to_copy->va,
+										   page_to_copy->writable, child_copy_pm, page_to_copy->frame->kva); // NULL에 메모리 로드하는 함수 만들기
+			// 부모에서 미리 메모리에 할당되있던 곳들은 claim
+			vm_claim_page(page_to_copy->va);
+		}
+		// 로드가 안 된 경우
+		else
+		{
+			// 자식에게 전달할 aux
+			void *aux = malloc(sizeof(lazy_load_info));
 
-	// // src 해시테이블 전체 순회하면서 dst 해시테이블로 요소 삽입
-	// while (cur != NULL)
-	// {
-	// 	hash_insert(dst, cur); // dst에 src 요소를 삽입
-	// 	cur = hash_next(hi);
-	// }
+			memcpy(aux, page_to_copy->uninit.aux, sizeof(lazy_load_info));
+			// 부모의 페이지로부터 자식 페이지 복사
+			vm_alloc_page_with_initializer(page_to_copy->uninit.type, page_to_copy->va,
+										   page_to_copy->writable, page_to_copy->uninit.init, aux);
+		}
+	}
+	return true;
+}
+
+static void hash_action_clear(struct hash_elem *e, void *aux)
+{
+	struct page *page = hash_entry(e, struct page, hash_elem);
+	destroy(page);
+	free(page);
 }
 
 /* Free the resource hold by the supplemental page table */
@@ -327,4 +369,6 @@ void supplemental_page_table_kill(struct supplemental_page_table *spt UNUSED)
 {
 	/* TODO: Destroy all the supplemental_page_table hold by thread and
 	 * TODO: writeback all the modified contents to the storage. */
+
+	hash_clear(&spt->hash_table, hash_action_clear);
 }

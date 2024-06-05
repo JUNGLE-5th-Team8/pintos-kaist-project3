@@ -10,6 +10,7 @@
 
 #include "vm/vm.h"
 #include "vm/uninit.h"
+#include <stdlib.h>
 
 bool uninit_initialize(struct page *page, void *kva);
 static void uninit_destroy(struct page *page);
@@ -49,6 +50,7 @@ bool uninit_initialize(struct page *page, void *kva)
 	/* Fetch first, page_initialize may overwrite the values */
 	vm_initializer *init = uninit->init;
 	void *aux = uninit->aux;
+	page->is_loaded = true; // 물리메모리에 적재될때 is_loaded 체크해줌.
 
 	/* TODO: You may need to fix this function. */
 	return uninit->page_initializer(page, uninit->type, kva) &&
@@ -65,4 +67,5 @@ uninit_destroy(struct page *page)
 	struct uninit_page *uninit UNUSED = &page->uninit;
 	/* TODO: Fill this function.
 	 * TODO: If you don't have anything to do, just return. */
+	free(page->uninit.aux);
 }
