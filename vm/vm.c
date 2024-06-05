@@ -187,13 +187,14 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	// if(!user){
 	// 	return false;
 	// }
-	if(write&&!page->writable) return false;
 
 	if(!(page = spt_find_page(spt,addr))){
 		// printf("vm_try_handle_fault : page가 존재하지 않음. %#x\n",addr);
 		// printf("원인은 무엇인지 kenerl or user %d\n",user);
 		return false;
+		
 	}
+	if(write&&!page->writable) return false;	
 	// else{
 	// 	printf("vm_try_handle_fault : 존재하는 주소에 접근하는건데 addr %#x down addr%#x\n",addr,pg_round_down(addr));//debug
 	// 	printf("vm_try_handle_fault : 찾은 페이지의 주소%#x\n",page->va);
@@ -293,7 +294,7 @@ static uint64_t spt_hash_func(struct hash_elem* supplemental_hash_elem){
 /* Copy supplemental page table from src to dst */
 /*부모 page의 load여부 확인 : loaded상태라면 vn_initilzer에 
 lazyload_segment가 아니라 부모 page의 kva를 통해 그곳에 있는 내용을
-자식의 할당된 부분에 채워넣게 하기
+자식의 할당된 부분에 채워넣게
 자식의 할당된 부분
 	채워 넣기, 아니라면 부모의 page struct그냥 복사만 하기*/
 bool

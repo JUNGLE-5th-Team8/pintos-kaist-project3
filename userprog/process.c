@@ -22,6 +22,14 @@
 #include "vm/vm.h"
 #endif
 
+typedef struct lazy_load_info_t
+{
+   struct file *file; // 로드할 파일의 포인터
+   off_t offset;      // 파일 내에서 읽기 시작할 위치
+   size_t read_bytes; // 파일에서 읽을 바이트 수
+   size_t zero_bytes; // 0으로 채울 바이트 수
+} lazy_load_info;
+
 static void process_cleanup(void);
 static bool load(const char *file_name, struct intr_frame *if_);
 static void initd(void *f_name);
@@ -919,25 +927,29 @@ install_page(void *upage, void *kpage, bool writable)
 static bool
 lazy_load_segment(struct page *page, void *aux)
 {
-	/* TODO: Load the segment from the file */
-	/* TODO: This called when the first page fault occurs on address VA. */
-	/* TODO: VA is available when calling this function. */
-	//aux는 page_read_bytes, page_zero_bytes
-	struct file* file_to_load = thread_current()->run_file;
-	size_t page_read_bytes = *(size_t*)aux;
-	size_t page_zero_bytes = *((size_t*)aux+1);
-	off_t file_offset = *((size_t*)aux+2);
-	file_seek(file_to_load,file_offset);
+   /* TODO: Load the segment from the file */
+   /* TODO: This called when the first page fault occurs on address VA. */
+   /* TODO: VA is available when calling this function. */
+   if (page == NULL)
+   {
+      return false;
+   }
 
-	if (file_read(file_to_load, page->frame->kva, page_read_bytes) != page_read_bytes){
-		palloc_free_page(page->frame->kva);
-		return false;
-	}
+   lazy_load_info *info = aux;
 
-	memset(page->frame->kva + page_read_bytes, 0, page_zero_bytes);
-	//aux를 사용했으니 메모리 해제
-	free(aux);
-	return true;
+   file_seek(info->file, info->offset);
+
+   // 파일에서 페이지를 읽어 메모리에 로드한다.
+   if (file_read(info->file, page->frame->kva, info->read_bytes) != (int)info->read_bytes)
+   {
+      // printf("lazyload 읽기 실패\n"); // debug
+      return false; // 파일 읽기 실패
+   }
+   memset(page->frame->kva + info->read_bytes, 0, info->zero_bytes);
+
+   free(info);
+   // 페이지 테이블에 페이지를 추가한다.
+   return true;
 }
 
 /* Loads a segment starting at offset OFS in FILE at address
@@ -956,40 +968,49 @@ lazy_load_segment(struct page *page, void *aux)
  * or disk read error occurs. */
 static bool
 load_segment(struct file *file, off_t ofs, uint8_t *upage,
-			 uint32_t read_bytes, uint32_t zero_bytes, bool writable)
+          uint32_t read_bytes, uint32_t zero_bytes, bool writable)
 {
-	ASSERT((read_bytes + zero_bytes) % PGSIZE == 0);
-	ASSERT(pg_ofs(upage) == 0);
-	ASSERT(ofs % PGSIZE == 0);
-	size_t file_offset = ofs;
+   ASSERT((read_bytes + zero_bytes) % PGSIZE == 0);
+   ASSERT(pg_ofs(upage) == 0);
+   ASSERT(ofs % PGSIZE == 0);
 
-	while (read_bytes > 0 || zero_bytes > 0)
-	{
-		/* Do calculate how to fill this page.
-		 * We will read PAGE_READ_BYTES bytes from FILE
-		 * and zero the final PAGE_ZERO_BYTES bytes. */
-		size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
-		size_t page_zero_bytes = PGSIZE - page_read_bytes;
+   while (read_bytes > 0 || zero_bytes > 0)
+   {
+      /* Do calculate how to fill this page.
+       * We will read PAGE_READ_BYTES bytes from FILE
+       * and zero the final PAGE_ZERO_BYTES bytes. */
+      size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
+      size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
-		/* TODO: Set up aux to pass information to the lazy_load_segment. */
-		void *aux = NULL;
-		aux = malloc(sizeof(size_t)*3);
-		*(size_t*)aux = page_read_bytes;
-		*((size_t*)aux+1) = page_zero_bytes;
-		*((size_t*)aux+2) = file_offset;
+      /* TODO: Set up aux to pass information to the lazy_load_segment. */
 
-		if (!vm_alloc_page_with_initializer(VM_ANON, upage,
-											writable, lazy_load_segment, aux))
-			return false;
+      void *aux = NULL;
+      lazy_load_info *aux_info = malloc(sizeof(struct lazy_load_info_t));
+      if (aux_info == NULL)
+      {
+         return false;
+      }
+      aux_info->file = file;
+      aux_info->offset = ofs;
+      aux_info->read_bytes = read_bytes;
+      aux_info->zero_bytes = zero_bytes;
 
-		file_offset += page_read_bytes;
-		/* Advance. */
-		read_bytes -= page_read_bytes;
-		zero_bytes -= page_zero_bytes;
-		upage += PGSIZE;
-	}
-	return true;
+      aux = aux_info;
+      if (!vm_alloc_page_with_initializer(VM_ANON, upage,
+                                 writable, lazy_load_segment, aux))
+      {
+         return false;
+      }
+
+      /* Advance. */
+      ofs += page_read_bytes;
+      read_bytes -= page_read_bytes;
+      zero_bytes -= page_zero_bytes;
+      upage += PGSIZE;
+   }
+   return true;
 }
+
 // if (kpage != NULL)
 // 	{
 // 		success = install_page(((uint8_t *)USER_STACK) - PGSIZE, kpage, true);
