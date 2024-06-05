@@ -286,6 +286,7 @@ int exec(const char *cmd_line)
 	{
 		// 메모리 할당에 실패하면 상태 -1로 프로세스를 종료합니다.
 		// palloc_free_page(cl_copy);
+		printf("exec 오류\n");
 		exit(-1);
 	}
 
@@ -296,6 +297,7 @@ int exec(const char *cmd_line)
 	// 실행에 실패하면 상태 -1로 프로세스를 종료합니다.
 	if (process_exec(cl_copy) == -1)
 	{
+		printf("exec 오류\n");
 		exit(-1);
 	}
 }

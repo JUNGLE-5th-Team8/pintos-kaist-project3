@@ -54,6 +54,7 @@ uninit_initialize (struct page *page, void *kva) {
 	if(init){
 		if(!init (page, aux)){
 			printf("init 실패\n");
+			// free(aux);
 			return false;
 		}
 	}
@@ -61,6 +62,7 @@ uninit_initialize (struct page *page, void *kva) {
 		printf("page initailize 실패\n");
 		return false;
 	}
+	page->is_loaded = true;
 	/* TODO: You may need to fix this function. */
 	return true;
 }
@@ -73,4 +75,6 @@ uninit_destroy (struct page *page) {
 	struct uninit_page *uninit UNUSED = &page->uninit;
 	/* TODO: Fill this function.
 	 * TODO: If you don't have anything to do, just return. */
+	free(uninit->aux);
+	// free(page->frame);
 }

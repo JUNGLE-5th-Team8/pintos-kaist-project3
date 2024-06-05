@@ -1,5 +1,6 @@
 /* vm.c: Generic interface for virtual memory objects. */
 
+#include "lib/string.h"
 #include "threads/malloc.h"
 #include "vm/vm.h"
 #include "vm/inspect.h"
@@ -8,7 +9,7 @@
 #include "userprog/process.h"
 #include "vm/uninit.h"
 #include "vm/anon.h"
-
+static bool child_copy_pm(struct page* page, void* aux);
 static bool spt_hash_less_func (const struct hash_elem *a,const struct hash_elem *b,void *aux);
 static uint64_t spt_hash_func(struct hash_elem* supplemental_hash_elem);
 static struct page* page_entry_from_hash_elem(struct hash_elem* supplemental_hash_elem);
@@ -82,6 +83,7 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 		upage = pg_round_down(upage);
 		uninit_new(new_page,upage,init,type,aux,page_initializer);
 		new_page -> writable = writable;
+		new_page -> is_loaded = false;
 
 		// printf("vm_alloc_page_with_initializer : page va : %d\n",new_page->va);//debug
 		/* TODO: Insert the page into the spt. */
@@ -291,20 +293,56 @@ static uint64_t spt_hash_func(struct hash_elem* supplemental_hash_elem){
 	// return hash_bytes(spt_va,sizeof(void*));
 }
 
+//부모의 메모리로부터 자식의 메모리에 채워넣는 함수
+static bool
+child_copy_pm(struct page* page, void* aux){
+	page->is_loaded =true;
+	memcpy(page->frame->kva,aux,PGSIZE);
+	return true;
+}
 /* Copy supplemental page table from src to dst */
 /*부모 page의 load여부 확인 : loaded상태라면 vn_initilzer에 
 lazyload_segment가 아니라 부모 page의 kva를 통해 그곳에 있는 내용을
-자식의 할당된 부분에 채워넣게
-자식의 할당된 부분
-	채워 넣기, 아니라면 부모의 page struct그냥 복사만 하기*/
+자식의 할당된 부분에 채워넣게 구현, 아니라면 부모의 page struct를 통해 채워넣기*/
 bool
 supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 		struct supplemental_page_table *src UNUSED) {
+	struct hash_iterator i;
+
+	hash_first (&i, &src->hash_table);
+	while (hash_next (&i))
+	{
+		struct page *page_to_copy = page_entry_from_hash_elem(hash_cur(&i));
+		//로드된 경우
+		if(page_to_copy->is_loaded){//init메모리가 아니라면....
+			vm_alloc_page_with_initializer(page_to_copy->anon.type,page_to_copy->va,
+			page_to_copy->writable,child_copy_pm,page_to_copy->frame->kva);//NULL에 메모리 로드하는 함수 만들기
+			//부모에서 미리 메모리에 할당되있던 곳들은 claim
+			vm_claim_page(page_to_copy->va);
+		}
+		//로드가 안 된 경우
+		else{
+			//자식에게 전달할 aux
+			void* aux = malloc(sizeof(lazy_load_info));
+			memcpy(aux,page_to_copy->uninit.aux,sizeof(lazy_load_info));
+			//부모의 페이지로부터 자식 페이지 복사
+			vm_alloc_page_with_initializer(page_to_copy->uninit.type,page_to_copy->va,
+			page_to_copy->writable,page_to_copy->uninit.init,aux);
+		}
+	}
+	return true;
 }
 
+void free_page(struct hash_elem* elem, void *aux){
+	struct page *page_to_del = page_entry_from_hash_elem(elem);
+	destroy(page_to_del);
+	free(page_to_del);
+}
 /* Free the resource hold by the supplemental page table */
 void
 supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 	/* TODO: Destroy all the supplemental_page_table hold by thread and
 	 * TODO: writeback all the modified contents to the storage. */
+	//spt에 있는 page 구조체들만 제거하는 것만 구현
+	hash_clear(spt,free_page);
 }

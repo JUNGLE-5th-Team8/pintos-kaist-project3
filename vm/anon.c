@@ -2,6 +2,7 @@
 
 #include "vm/vm.h"
 #include "devices/disk.h"
+#include "vm/uninit.h"
 
 /* DO NOT MODIFY BELOW LINE */
 static struct disk *swap_disk;
@@ -30,9 +31,12 @@ anon_initializer (struct page *page, enum vm_type type, void *kva) {
 	/* Set up the handler */
 	page->operations = &anon_ops;
 
+	struct uninit_page* uninit_page = &page->uninit;
+	void* aux = uninit_page->aux;
 	//anon 페이지에 필요한 멤버들 수정
 	struct anon_page *anon_page = &page->anon;
 	anon_page->type = type;
+	// anon_page->aux = aux;
 	if(kva==NULL){
 		return false;
 	}
@@ -57,4 +61,7 @@ anon_swap_out (struct page *page) {
 static void
 anon_destroy (struct page *page) {
 	struct anon_page *anon_page = &page->anon;
+	// if(anon_page->aux!=NULL){
+	// 	free(anon_page->aux);
+	// }
 }
