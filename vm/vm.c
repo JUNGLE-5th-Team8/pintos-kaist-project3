@@ -212,6 +212,11 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 		return false;
 	}
 
+	if (write && !page->writable)
+	{
+		return false;
+	}
+
 	if (vm_do_claim_page(page))
 	{
 		// printf("do claim 성공\n"); //debug
@@ -304,6 +309,17 @@ void supplemental_page_table_init(struct supplemental_page_table *spt UNUSED)
 bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 								  struct supplemental_page_table *src UNUSED)
 {
+	// struct hash_iterator *hi;
+	// hash_first(hi, &src->hash_table); // 해시 이터레이터 초기화
+
+	// struct hash_elem *cur = hash_next(hi);
+
+	// // src 해시테이블 전체 순회하면서 dst 해시테이블로 요소 삽입
+	// while (cur != NULL)
+	// {
+	// 	hash_insert(dst, cur); // dst에 src 요소를 삽입
+	// 	cur = hash_next(hi);
+	// }
 }
 
 /* Free the resource hold by the supplemental page table */

@@ -68,11 +68,9 @@ void syscall_init(void)
 
 	lock_init(&filesys_lock); // to avoid race condition protect filesystem
 }
-u
 
-	/* The main system call interface */
-	void
-	syscall_handler(struct intr_frame *f UNUSED)
+/* The main system call interface */
+void syscall_handler(struct intr_frame *f UNUSED)
 {
 	// TODO: Your implementation goes here.
 	// printf("system call!\n");

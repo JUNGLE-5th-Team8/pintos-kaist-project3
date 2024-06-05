@@ -338,7 +338,7 @@ int process_exec(void *f_name)
 	/* If load failed, quit. */ /* 로드에 실패하면 종료합니다. */
 	if (!success)
 	{
-		printf("로드 실패... Load failed\n"); /* Debug */
+		// printf("로드 실패... Load failed\n"); /* Debug */
 		return -1;
 	}
 
