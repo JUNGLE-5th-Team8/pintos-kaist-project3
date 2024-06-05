@@ -55,4 +55,9 @@ static void
 anon_destroy(struct page *page)
 {
 	struct anon_page *anon_page = &page->anon;
+	// palloc_free_page(page->frame->kva);
+	// free(page->frame);
+	// if (page->uninit.aux)
+	// 	free(page->uninit.aux);
+	// free(page);
 }

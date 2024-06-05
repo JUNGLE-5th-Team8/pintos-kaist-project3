@@ -384,17 +384,7 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 		{
 			/* 부모의 aux 복사 */
 			struct auxillary *aux = malloc(sizeof(struct auxillary));
-
-			/* 부모의 aux가 NULL일때 */
-			if (old_page->uninit.aux == NULL)
-			{
-				free(aux);
-				aux = NULL;
-			}
-			else
-			{
-				memcpy(aux, old_page->uninit.aux, sizeof(struct auxillary));
-			}
+			memcpy(aux, old_page->uninit.aux, sizeof(struct auxillary));
 
 			/* 페이지 생성 및 삽입 */
 			vm_alloc_page_with_initializer(old_page->uninit.type, old_page->va, old_page->writable,
@@ -404,11 +394,22 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 	return true;
 }
 
+void hash_action_clear(struct hash_elem *hash_e, void *aux)
+{
+	struct page *page = hash_entry(hash_e, struct page, hash_elem);
+	list_remove(&hash_e->list_elem);
+	// destroy(page);
+	// palloc_free_page(page->frame->kva);
+	// free(page->frame);
+	// free(page->uninit.aux);
+	// free(page);
+}
+
 /* Free the resource hold by the supplemental page table */
 void supplemental_page_table_kill(struct supplemental_page_table *spt UNUSED)
 {
 	/* TODO: Destroy all the supplemental_page_table hold by thread and
 	 * TODO: writeback all the modified contents to the storage. */
 
-	// hash_clear(spt->hash_table, hash_action_clear);
+	hash_clear(&spt->hash_table, hash_action_clear);
 }
