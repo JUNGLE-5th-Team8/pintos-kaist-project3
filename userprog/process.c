@@ -938,7 +938,7 @@ lazy_load_segment(struct page *page, void *aux)
 	}
 	memset(page->frame->kva + info->read_bytes, 0, info->zero_bytes);
 
-	free(info); // unchecked aux malloc free
+	// free(info); // unchecked aux malloc free/
 
 	return true;
 }

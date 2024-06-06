@@ -65,6 +65,7 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
 	ASSERT(VM_TYPE(type) != VM_UNINIT)
 
 	struct supplemental_page_table *spt = &thread_current()->spt;
+	upage = pg_round_down(upage);
 
 	/* Check wheter the upage is already occupied or not. */
 	if (spt_find_page(spt, upage) == NULL)
@@ -188,6 +189,19 @@ vm_get_frame(void)
 static void
 vm_stack_growth(void *addr UNUSED)
 {
+
+	void *addr_bottom = pg_round_down(addr);
+
+	while (!spt_find_page(&thread_current()->spt, addr_bottom))
+	{
+		// printf("반복되는상황발생\n"); // debug
+		// addr 주소를 포함하도록 스택을 확장
+		if (vm_alloc_page(VM_MARKER_0 | VM_ANON, addr_bottom, true))
+		{
+			vm_claim_page(addr_bottom);
+		}
+		addr_bottom += PGSIZE;
+	}
 }
 
 /* Handle the fault on write_protected page */
@@ -215,14 +229,23 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 	page = spt_find_page(spt, addr);
 	if (page == NULL)
 	{
+
+		void *rsp = f->rsp; // 스택 포인터
+		// 커널 모드일때 스택 포인터 위치 확인
+		// if (!user)
+		// {
+		// 	rsp = thread_current()->rsp;
+		// }
+
+		// 스택제한사이즈확인 && 주소접근이 스택영역인지 확인후 페이지 할당
+		if ((USER_STACK - USER_STACK_LIMIT) <= addr && (rsp <= addr || (rsp - 8) == addr) && addr <= USER_STACK)
+		{
+			vm_stack_growth(addr);
+			return true;
+		}
+
 		return false; // 페이지를 찾을 수 없으면 실패
 	}
-
-	// if (!not_present && !user)
-	// {
-	// 	return false;
-	// }
-
 	if (write && !page->writable)
 	{
 		return false;
