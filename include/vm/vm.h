@@ -59,6 +59,7 @@ struct page
 	bool is_loaded;				// 물리메모리의 탑재 여부를 알려주는 플래그
 	enum vm_type is_stack;		// 스택 페이지 확인 플래그
 	struct hash_elem hash_elem; // 해시테이블 element
+	void *start_address;		// mmap 시작주소 저장용
 
 	/*--------------------------------------------------------------*/
 

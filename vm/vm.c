@@ -59,8 +59,7 @@ static struct page *page_entry_from_hash_elem(struct hash_elem *supplemental_has
  * `vm_alloc_page`. */
 // pending page = 아직 메모리에 로드되지 않았지만 곧 사용될 페이지
 // 페이지를 생성하고자 할때 vm_alloc_page 사용해야함.
-bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writable,
-									vm_initializer *init, void *aux)
+bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writable, vm_initializer *init, void *aux)
 {
 	ASSERT(VM_TYPE(type) != VM_UNINIT)
 
@@ -74,7 +73,7 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
 		 * TODO: and then create "uninit" page struct by calling uninit_new. You
 		 * TODO: should modify the field after calling the uninit_new. */
 		/* TODO: Insert the page into the spt. */
-		struct page *page = malloc(sizeof(struct page));
+		struct page *page = calloc(1, sizeof(struct page));
 		// page_initializer 함수 포인터 선언
 		bool (*page_initializer)(struct page *, enum vm_type, void *kva);
 
@@ -85,8 +84,10 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
 			page_initializer = anon_initializer;
 			break;
 
-		case VM_FILE:
+		case VM_FILE:;
+			lazy_load_info *aux_info = aux;
 			page_initializer = file_backed_initializer;
+			page->start_address = aux_info->start_addr;
 			break;
 
 		default:
@@ -149,8 +150,20 @@ bool spt_insert_page(struct supplemental_page_table *spt UNUSED,
 
 void spt_remove_page(struct supplemental_page_table *spt, struct page *page)
 {
+	// spt에서 page 삭제 -> hash_delete
+	// hash_delete에서 반환된 요소로 나온 page의 frame 해제
+	// page dealloc
+
+	// 요소가 없으면 null 반환, 있으면 제거하고 hash_elem 반환
+	struct hash_elem *he = hash_delete(&spt->hash_table, &page->hash_elem);
+	if (he != NULL)
+	{
+		page = page_entry_from_hash_elem(he);
+		free(page->frame);
+	}
+
 	vm_dealloc_page(page);
-	return true;
+	// return true;
 }
 
 /* Get the struct frame, that will be evicted. */
@@ -184,7 +197,6 @@ vm_get_frame(void)
 	struct frame *frame = NULL;
 	/* TODO: Fill this function. */
 
-	// unchecked : par_zero를 해줘야하는지 확실하진 않음.
 	void *paddr = palloc_get_page(PAL_USER | PAL_ZERO);
 
 	// 메모리가 꽉찼을 경우 swap out을 처리해줘야하지만 일단 panic(todo)로 케이스만 표시하고 넘어감.

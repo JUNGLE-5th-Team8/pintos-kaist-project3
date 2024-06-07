@@ -12,6 +12,7 @@ struct file_page
 	vm_initializer *init;
 	enum vm_type type;
 	void *aux;
+	// lazy_load_info load_info;
 	/* Initiate the struct page and maps the pa to the va */
 	bool (*page_initializer)(struct page *, enum vm_type, void *kva);
 };

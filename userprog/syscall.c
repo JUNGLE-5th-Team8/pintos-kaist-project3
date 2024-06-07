@@ -149,7 +149,8 @@ void syscall_handler(struct intr_frame *f UNUSED)
 		break;
 	case SYS_MUNMAP:
 		// void munmap(void *addr);
-		// munmap();
+
+		munmap((void *)f->R.rdi);
 		break;
 
 	// case SYS_DUP2: /* 구현 실패... */
@@ -371,8 +372,13 @@ bool remove(const char *file)
  */
 int open(const char *file)
 {
-	check_address(file);				 // 주어진 파일 이름 주소가 유효한지 확인합니다.
+	// printf("오픈이 돌아가나?\n");
+
+	check_address(file); // 주어진 파일 이름 주소가 유효한지 확인합니다.
+	// printf("오픈이 오류나나222222?\n");
+
 	struct file *f = filesys_open(file); // 파일 시스템에서 파일을 엽니다.
+
 	if (!f)
 	{
 		return -1; // 파일을 열 수 없는 경우 -1을 반환합니다.
@@ -555,8 +561,7 @@ void close(int fd)
 
 void *mmap(void *addr, size_t length, int writable, int fd, off_t offset)
 {
-	// 유효한 주소인지 확인
-	check_address(addr);
+	// printf("엠맵이 돌아가나?\n");
 
 	if (fd < 2 || MAX_FILES <= fd) // for write-bad-fd
 	{
@@ -569,11 +574,17 @@ void *mmap(void *addr, size_t length, int writable, int fd, off_t offset)
 		return NULL;
 	}
 
+	/* 파일길이를 파일 사이즈로 맞춰줌 */
+	if (length > filesize(fd))
+	{
+		length = filesize(fd);
+	}
+
 	void *check_addr = addr;
 	/* 중복된 페이지가 있는지 검사 -> while문으로 확인*/
 	while (check_addr < (length + addr))
 	{
-		if (!spt_find_page(&thread_current()->spt, addr))
+		if (spt_find_page(&thread_current()->spt, check_addr))
 		{
 			return NULL;
 		}
@@ -594,10 +605,17 @@ void *mmap(void *addr, size_t length, int writable, int fd, off_t offset)
 	return NULL;
 }
 
-// void munmap(void *addr)
-// {
+void munmap(void *addr)
+{
+	// printf("언맵이 돌아가나?\n");
 
-// }
+	// 유효한 주소인지 확인
+	check_address(addr);
+	// printf("언맵이 돌아가나?\n");
+
+	// 유효한 주소이면 do_munmap() 호출
+	do_munmap(addr);
+}
 
 // /**
 //  * @brief Duplicates an existing file descriptor to a new file descriptor.
