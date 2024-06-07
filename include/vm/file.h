@@ -9,6 +9,7 @@ enum vm_type;
 struct file_page
 {
 	enum vm_type type;
+	void *aux;
 };
 
 void vm_file_init(void);

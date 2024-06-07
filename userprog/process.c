@@ -952,7 +952,6 @@ lazy_load_segment(struct page *page, void *aux)
 	size_t page_read_bytes = auxi->prb;
 	size_t page_zero_bytes = auxi->pzb;
 	off_t ofs = auxi->ofs;
-
 	file_seek(file, ofs);
 
 	/* 할당된 페이지에 로드 */

@@ -72,10 +72,11 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
 		{
 		case VM_ANON:
 			uninit_new(new_page, upage, init, type, aux, anon_initializer);
+			new_page->start_address = NULL;
 			break;
 		case VM_FILE:
 			uninit_new(new_page, upage, init, type, aux, file_backed_initializer);
-			new_page->uninit.start_address = ((struct auxillary *)aux)->start_address;
+			new_page->start_address = ((struct auxillary *)aux)->start_address;
 			break;
 		default:
 			break;

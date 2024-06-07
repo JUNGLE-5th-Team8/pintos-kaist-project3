@@ -168,6 +168,7 @@ void check_address(void *addr)
 	// 주어진 주소가 현재 프로세스의 페이지 테이블에 유효하게 매핑되어 있는지 확인
 	if (addr == NULL || !is_user_vaddr(addr) || spt_find_page(&thread_current()->spt, addr) == NULL)
 	{
+		// printf("잘못된 접근\n");
 		// 잘못된 접근일 경우 프로세스 종료
 		exit(-1);
 	}
@@ -589,60 +590,83 @@ void close(int fd)
 
 void *mmap(void *addr, size_t length, int writable, int fd, off_t offset)
 {
-	check_address(addr);
-
+	// printf("check_address전 addr : %p\n", addr); /* Debug */
+	// check_address(addr);
+	// printf("check_address후 addr : %p\n", addr);
 	/* addr가 NULL이면 실패 (실제 리눅스에서는 커널이 매핑할 주소를 찾아줌) */
 	if (addr == NULL)
 	{
-		printf("addr가 NULL\n"); /* Debug */
+		// printf("addr가 NULL\n"); /* Debug */
 		return NULL;
 	}
 
 	/* length가 0이면 실패 */
 	if (length == 0)
 	{
-		printf("length가 0\n"); /* Debug */
+		// printf("length가 0\n"); /* Debug */
 		return NULL;
 	}
 
 	/* fd가 콘솔입출력이면 실패 */
-	if (fd < 2)
+	if (fd < 2 || fd >= MAX_FILES)
 	{
-		printf("fd가 콘솔입출력\n"); /* Debug */
+		// printf("fd가 콘솔입출력\n"); /* Debug */
 		return NULL;
 	}
 
 	/* fd로 열린 파일의 길이가 0바이트 인 경우 실패(파일이 안열려 있으면 -1) */
 	if (filesize(fd) < 1)
 	{
-		printf("fd로 열린 파일의 길이를 넘음\n"); /* Debug */
+		// printf("fd로 열린 파일의 길이를 넘음\n"); /* Debug */
+		return NULL;
+	}
+	length = length > filesize(fd) ? filesize(fd) : length;
+
+	/* 페이지 정렬 검사 */
+	if (pg_round_down(addr) != addr)
+	{
 		return NULL;
 	}
 
 	/* 페이지 정렬 및 겹침 검사(이미 할당된 페이지이면 실패) */
 	for (uint64_t page_addr = addr; page_addr < addr + length; page_addr += PGSIZE)
 	{
-		if (pg_round_down(page_addr) != page_addr || spt_find_page(&thread_current()->spt, page_addr))
+		if (spt_find_page(&thread_current()->spt, page_addr))
 		{
-			printf("페이지 정렬 및 겹침 검사\n"); /* Debug */
+			// printf("페이지 정렬 및 겹침 검사\n"); /* Debug */
 			return NULL;
 		}
 	}
 
 	if (addr == do_mmap(addr, length, writable, get_file_from_fdt(fd), offset))
 	{
-		// printf("do_mmap성공\n");
+		// printf("do_mmap후 addr : %p\n", addr); /* Debug */
+		// if (spt_find_page(&thread_current()->spt, addr))
+		// printf("do_mmap성공\n"); /* Debug */
 		return addr;
 	}
-	printf("do_mmap실패\n"); /* Debug */
+	// printf("do_mmap실패\n"); /* Debug */
 	return NULL;
 }
 
 void munmap(void *addr)
 {
-	/* mmap 호출로 할당된 주소여야 함 */
-	if (spt_find_page(&thread_current()->spt, addr)->file.type != VM_FILE)
-		return;
+	// check_address(addr);
 
+	// printf("munmap 시작 addr: %p\n", addr);
+	/* 할당된 주소여야 함 */
+	struct page *page = spt_find_page(&thread_current()->spt, addr);
+	if (page == NULL || page->file.type != VM_FILE)
+	{
+		printf("이미 해제됐거나 VM_FILE이 아님\n");
+		return;
+	}
+
+	/* addr가 mmap호출로 반환된 주소가 아닐 경우 */
+	if (addr != page->start_address)
+	{
+		printf("addr != page->start_address\n");
+		return;
+	}
 	do_munmap(addr);
 }

@@ -50,8 +50,9 @@ struct page
 
 	/* Your implementation */
 	/*------- project3 추가 -------------------------------------*/
-	bool writable;				// true일경우 해당 주소에 write 가능
-	bool is_loaded;				// 물리메모리의 탑재 여부를 알려주는 플래그
+	bool writable;	// true일경우 해당 주소에 write 가능
+	bool is_loaded; // 물리메모리의 탑재 여부를 알려주는 플래그
+	void *start_address;
 	struct hash_elem hash_elem; // 해시테이블 element
 
 	/*--------------------------------------------------------------*/
