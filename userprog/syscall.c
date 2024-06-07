@@ -16,6 +16,7 @@
 #include "threads/palloc.h"
 #include "devices/input.h"
 #include "userprog/process.h"
+#include "vm/vm.h"
 
 void syscall_entry(void);
 void syscall_handler(struct intr_frame *);
@@ -23,7 +24,7 @@ void syscall_handler(struct intr_frame *);
 void check_address(void *addr);
 void get_argument(void *rsp, int *argv, int argc);
 // int add_file_descriptor(struct file *f);
-// struct file *get_file_from_fdt(int fd);
+struct file *get_file_from_fdt(int fd);
 // void remove_file_from_fdt(int fd);
 
 /* Projects 2 and later. */
@@ -42,6 +43,7 @@ int write(int fd, const void *buffer, unsigned size);
 void seek(int fd, unsigned position);
 unsigned tell(int fd);
 void close(int fd);
+void* sys_mmap(void *addr,size_t length,int writable,int fd, off_t offset);
 
 /* System call.
  *
@@ -134,6 +136,10 @@ void syscall_handler(struct intr_frame *f UNUSED)
 	case SYS_CLOSE: /* Close an open file. */
 		close((int)f->R.rdi);
 		break;
+		// void* sys_mmap(void *addr,size_t length,int writable,int fd, off_t offset)
+	case SYS_MMAP:
+		f->R.rax = sys_mmap((void*)f->R.rdi,(size_t)f->R.rsi,(int)f->R.rdx,(int)f->R.r10,(off_t)f->R.r8);
+		break;
 	// case SYS_DUP2: /* 구현 실패... */
 	// 	dup2((int)f->R.rdi, (int)f->R.rsi);
 	// 	break;
@@ -144,12 +150,14 @@ void syscall_handler(struct intr_frame *f UNUSED)
 	}
 }
 
+//|| spt_find_page(&thread_current()->spt,addr)==NULL
 /* Check if the address is in user space */
 void check_address(void *addr)
 {
 	// 포인터가 가리키는 주소가 유저 영역의 주소인지 확인
 	// 주어진 주소가 현재 프로세스의 페이지 테이블에 유효하게 매핑되어 있는지 확인
-	if (addr == NULL || !is_user_vaddr(addr) || pml4_get_page(thread_current()->pml4, addr) == NULL)
+	//|| spt_find_page(&thread_current()->spt,addr)==NULL
+	if (addr == NULL || !is_user_vaddr(addr) || spt_find_page(&thread_current()->spt,addr)==NULL)
 	{
 		// 잘못된 접근일 경우 프로세스 종료
 		// printf("잘못된 접근!!!!!!!!!!!!\n");
@@ -166,6 +174,23 @@ void get_argument(void *rsp, int *argv, int argc)
 		check_address(arg_ptr);
 		argv[i] = *(int *)arg_ptr;
 	}
+}
+
+void* sys_mmap(void *addr,size_t length,int writable,int fd, off_t offset)
+{
+	//나중에 input인지 output인지 검사해야할듯.
+	struct file* file =NULL;
+	check_address(addr);
+
+	if(!(file = get_file_from_fdt(fd))){
+		return NULL;
+	}
+
+	if(filesize(fd) < 1){
+		return NULL;
+	}
+
+	return do_mmap(addr,length,writable,file,offset);
 }
 
 // 파일 객체에 대한 파일 디스크립터를 생성하는 함수
@@ -286,7 +311,7 @@ int exec(const char *cmd_line)
 	{
 		// 메모리 할당에 실패하면 상태 -1로 프로세스를 종료합니다.
 		// palloc_free_page(cl_copy);
-		printf("exec 오류\n");
+		// printf("exec 오류\n");
 		exit(-1);
 	}
 
@@ -297,7 +322,7 @@ int exec(const char *cmd_line)
 	// 실행에 실패하면 상태 -1로 프로세스를 종료합니다.
 	if (process_exec(cl_copy) == -1)
 	{
-		printf("exec 오류\n");
+		// printf("exec 오류\n");
 		exit(-1);
 	}
 }
@@ -399,6 +424,10 @@ int filesize(int fd)
 int read(int fd, void *buffer, unsigned size)
 {
 	check_address(buffer); // 주어진 버퍼 주소가 유효한지 확인합니다.
+	if(spt_find_page(&thread_current()->spt,buffer)->writable == false){
+		exit(-1);
+	}
+
 	off_t read_byte;
 	uint8_t *read_buffer = buffer;
 	if (fd == STDIN_FILENO)
@@ -444,6 +473,7 @@ int read(int fd, void *buffer, unsigned size)
 int write(int fd, const void *buffer, unsigned size)
 {
 	check_address((void *)buffer); // 주어진 버퍼 주소가 유효한지 확인합니다.
+	
 	off_t write_byte;
 	if (fd == STDIN_FILENO)
 	{

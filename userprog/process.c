@@ -939,6 +939,7 @@ lazy_load_segment(struct page *page, void *aux)
       return false; // 파일 읽기 실패
    }
    memset(page->frame->kva + info->read_bytes, 0, info->zero_bytes);
+   free(aux);
    // 페이지 테이블에 페이지를 추가한다.
    return true;
 }

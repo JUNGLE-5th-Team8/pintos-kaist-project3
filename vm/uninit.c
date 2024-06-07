@@ -50,6 +50,11 @@ uninit_initialize (struct page *page, void *kva) {
 	/* Fetch first, page_initialize may overwrite the values */
 	vm_initializer *init = uninit->init;
 	void *aux = uninit->aux;
+	
+	if(!uninit->page_initializer(page, uninit->type, kva)){
+		printf("page initailize 실패\n");
+		return false;
+	}
 
 	if(init){
 		if(!init (page, aux)){
@@ -58,11 +63,8 @@ uninit_initialize (struct page *page, void *kva) {
 			return false;
 		}
 	}
-	if(!uninit->page_initializer(page, uninit->type, kva)){
-		printf("page initailize 실패\n");
-		return false;
-	}
 	page->is_loaded = true;
+	// printf("aux!!! %p",aux);
 	/* TODO: You may need to fix this function. */
 	return true;
 }

@@ -2,11 +2,14 @@
 #define VM_FILE_H
 #include "filesys/file.h"
 #include "vm/vm.h"
+// #include "userprog/process.h"
 
 struct page;
 enum vm_type;
 
 struct file_page {
+	enum vm_type type;
+	lazy_load_info* load_info;
 };
 
 void vm_file_init (void);

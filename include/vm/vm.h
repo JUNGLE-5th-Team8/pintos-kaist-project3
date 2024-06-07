@@ -3,6 +3,16 @@
 #include <stdbool.h>
 #include "threads/palloc.h"
 #include "lib/kernel/hash.h"
+#include "filesys/off_t.h"
+
+typedef struct lazy_load_info_t
+{
+   struct file *file; // 로드할 파일의 포인터
+   off_t offset;      // 파일 내에서 읽기 시작할 위치
+   size_t read_bytes; // 파일에서 읽을 바이트 수
+   size_t zero_bytes; // 0으로 채울 바이트 수
+   void* start_addr;
+} lazy_load_info;
 
 enum vm_type {
 	/* page not initialized */
@@ -51,6 +61,7 @@ struct page {
 	struct hash_elem spt_hash_elem; 
 	bool writable;
 	bool is_loaded;
+	void* start_addr;
 
 	/* Per-type data are binded into the union.
 	 * Each function automatically detects the current union */

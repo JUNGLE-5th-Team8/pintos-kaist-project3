@@ -9,6 +9,9 @@
 #include "userprog/process.h"
 #include "vm/uninit.h"
 #include "vm/anon.h"
+#include "threads/vaddr.h"
+
+#include "vm/file.h"
 static bool child_copy_pm(struct page* page, void* aux);
 static bool spt_hash_less_func (const struct hash_elem *a,const struct hash_elem *b,void *aux);
 static uint64_t spt_hash_func(struct hash_elem* supplemental_hash_elem);
@@ -73,17 +76,25 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 		new_page = calloc(1,sizeof(struct page));
 		if(new_page==NULL) PANIC("can't calloc!");
 		bool (*page_initializer) (struct page *, enum vm_type, void *kva);
+		void* start_addr = NULL;
 
 		if(VM_TYPE(type) == VM_ANON){
 			page_initializer = anon_initializer;
 		}
+		else if(VM_TYPE(type)==VM_FILE){
+			lazy_load_info* info = (lazy_load_info*)aux;
+			page_initializer == file_backed_initializer;
+			start_addr = info->start_addr;
+		}
 		else{
 			PANIC("type isn't exits");
 		}
+
 		upage = pg_round_down(upage);
 		uninit_new(new_page,upage,init,type,aux,page_initializer);
 		new_page -> writable = writable;
 		new_page -> is_loaded = false;
+		new_page-> start_addr = start_addr;
 
 		// printf("vm_alloc_page_with_initializer : page va : %d\n",new_page->va);//debug
 		/* TODO: Insert the page into the spt. */
@@ -158,7 +169,7 @@ vm_get_frame (void) {
 	frame = malloc(sizeof(struct frame));
 	frame->page = NULL;
 	frame-> kva = palloc_get_page(PAL_USER|PAL_ZERO);
-
+	// printf("%p\n",vtop(frame-> kva));
 	if(frame->kva == NULL){
 		PANIC("todo");
 	}
@@ -171,13 +182,18 @@ vm_get_frame (void) {
 /* Growing the stack. */
 static void
 vm_stack_growth (void *addr UNUSED) {
+	void* address_bottom = pg_round_down(addr);
+	while(!spt_find_page(&thread_current()->spt,address_bottom)){
+		vm_alloc_page(VM_ANON||8,address_bottom,true);
+		vm_claim_page(address_bottom);
+		address_bottom+=PGSIZE;	
+	}
 }
 
 /* Handle the fault on write_protected page */
 static bool
 vm_handle_wp (struct page *page UNUSED) {
 }
-
 /* Return true on success */
 bool
 vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
@@ -186,13 +202,16 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	struct page *page = NULL;
 	/* TODO: Validate the fault */
 	/* TODO: Your code goes here */
-	// if(!user){
-	// 	return false;
-	// }
 
 	if(!(page = spt_find_page(spt,addr))){
 		// printf("vm_try_handle_fault : page가 존재하지 않음. %#x\n",addr);
 		// printf("원인은 무엇인지 kenerl or user %d\n",user);
+		//page가 없는 경우 stack 영역인지 확인
+		//fault addr rsp보다 8만큼 아래거나, rsp를 이미 내린 상태에서 fault가 발생한 경우 처리
+		if(user && addr< USER_STACK && addr>=(USER_STACK-(PGSIZE<<8)) && (f->rsp-8==addr || f->rsp<=addr)){
+			vm_stack_growth(addr);
+			return true;
+		}
 		return false;
 		
 	}

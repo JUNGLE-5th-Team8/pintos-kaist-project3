@@ -151,6 +151,9 @@ page_fault(struct intr_frame *f)
 
 	/* Count page faults. */
 	page_fault_cnt++;
+	// if(user){
+	// 	printf("ㅠㅠ\n");
+	// }
 
 	/* If the fault is true fault, show info and exit. */
 	if (!user)
