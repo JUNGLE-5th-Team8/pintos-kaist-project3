@@ -8,6 +8,7 @@ struct auxillary
     size_t prb;
     size_t pzb;
     off_t ofs;
+    void *start_address;
 };
 
 tid_t process_create_initd(const char *file_name);

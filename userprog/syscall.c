@@ -42,6 +42,8 @@ int write(int fd, const void *buffer, unsigned size);
 void seek(int fd, unsigned position);
 unsigned tell(int fd);
 void close(int fd);
+void *mmap(void *addr, size_t length, int writable, int fd, off_t offset);
+void munmap(void *addr);
 
 /* System call.
  *
@@ -98,6 +100,7 @@ void syscall_handler(struct intr_frame *f UNUSED)
 
 	// Getting the system call number from the interrupt frame /* %rax 는 시스템 콜 번호 */
 	int syscall_number = f->R.rax;
+	thread_current()->saved_rsp = f->rsp;
 
 	switch (syscall_number)
 	{
@@ -145,6 +148,12 @@ void syscall_handler(struct intr_frame *f UNUSED)
 	// case SYS_DUP2: /* 구현 실패... */
 	// 	dup2((int)f->R.rdi, (int)f->R.rsi);
 	// 	break;
+	case SYS_MMAP:
+		f->R.rax = mmap((void *)f->R.rdi, (size_t)f->R.rsi, (int)f->R.rdx, (int)f->R.r10, (off_t)f->R.r8);
+		break;
+	case SYS_MUNMAP:
+		munmap((void *)f->R.rdi);
+		break;
 	default:
 		// 지원되지 않는 시스템 콜 처리
 		printf("Unknown system call: %d\n", syscall_number);
@@ -404,8 +413,10 @@ int filesize(int fd)
 int read(int fd, void *buffer, unsigned size)
 {
 	check_address(buffer); // 주어진 버퍼 주소가 유효한지 확인합니다.
+
 	/* 버퍼가 할당된 프레임이 writable이 아니면 exit(-1) */
-	if (spt_find_page(&thread_current()->spt, buffer)->writable != true)
+	struct page *found = spt_find_page(&thread_current()->spt, buffer);
+	if (found != NULL && found->writable == false)
 		exit(-1);
 
 	off_t read_byte;
@@ -575,3 +586,63 @@ void close(int fd)
 // 	}
 // 	return newfd;
 // }
+
+void *mmap(void *addr, size_t length, int writable, int fd, off_t offset)
+{
+	check_address(addr);
+
+	/* addr가 NULL이면 실패 (실제 리눅스에서는 커널이 매핑할 주소를 찾아줌) */
+	if (addr == NULL)
+	{
+		printf("addr가 NULL\n"); /* Debug */
+		return NULL;
+	}
+
+	/* length가 0이면 실패 */
+	if (length == 0)
+	{
+		printf("length가 0\n"); /* Debug */
+		return NULL;
+	}
+
+	/* fd가 콘솔입출력이면 실패 */
+	if (fd < 2)
+	{
+		printf("fd가 콘솔입출력\n"); /* Debug */
+		return NULL;
+	}
+
+	/* fd로 열린 파일의 길이가 0바이트 인 경우 실패(파일이 안열려 있으면 -1) */
+	if (filesize(fd) < 1)
+	{
+		printf("fd로 열린 파일의 길이를 넘음\n"); /* Debug */
+		return NULL;
+	}
+
+	/* 페이지 정렬 및 겹침 검사(이미 할당된 페이지이면 실패) */
+	for (uint64_t page_addr = addr; page_addr < addr + length; page_addr += PGSIZE)
+	{
+		if (pg_round_down(page_addr) != page_addr || spt_find_page(&thread_current()->spt, page_addr))
+		{
+			printf("페이지 정렬 및 겹침 검사\n"); /* Debug */
+			return NULL;
+		}
+	}
+
+	if (addr == do_mmap(addr, length, writable, get_file_from_fdt(fd), offset))
+	{
+		// printf("do_mmap성공\n");
+		return addr;
+	}
+	printf("do_mmap실패\n"); /* Debug */
+	return NULL;
+}
+
+void munmap(void *addr)
+{
+	/* mmap 호출로 할당된 주소여야 함 */
+	if (spt_find_page(&thread_current()->spt, addr)->file.type != VM_FILE)
+		return;
+
+	do_munmap(addr);
+}

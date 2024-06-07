@@ -75,6 +75,7 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
 			break;
 		case VM_FILE:
 			uninit_new(new_page, upage, init, type, aux, file_backed_initializer);
+			new_page->uninit.start_address = ((struct auxillary *)aux)->start_address;
 			break;
 		default:
 			break;
@@ -202,6 +203,18 @@ vm_get_frame(void)
 static void
 vm_stack_growth(void *addr UNUSED)
 {
+	void *addr_bottom = pg_round_down(addr);
+	/* 주소의 bottom이 스택한계를 넘으면 stack overflow */
+
+	while (!spt_find_page(&thread_current()->spt, addr_bottom))
+	{
+		/* 스택 프레임 할당 */
+		if (vm_alloc_page(VM_MARKER_0 | VM_ANON, addr_bottom, true))
+		{
+			vm_claim_page(addr_bottom);
+		}
+		addr_bottom += PGSIZE;
+	}
 }
 
 /* Handle the fault on write_protected page */
@@ -227,21 +240,32 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 		return false;
 	}
 
-	/* */
-
-	/* stack overflow로 인해서 발생한 pagefault일 때 */
-	// printf("pg_round_down(f->rsp) : %p\n", pg_round_down(f->rsp));/* Debug */
-	// printf("f->rsp : %p\n", f->rsp);/* Debug */
-	// if (pg_round_down(f->rsp - 8))
-	// {
-	// 	vm_stack_growth(addr);
-	// }
+	// printf("pg_round_up(f->rsp) : %p\n", pg_round_up(f->rsp));	   /* Debug */
+	// printf("pg_round_down(f->rsp) : %p\n", pg_round_down(f->rsp)); /* Debug */
+	// printf("f->rsp : %p\n", f->rsp);							   /* Debug */
 
 	page = spt_find_page(spt, addr);
 	if (page == NULL)
 	{
-		// printf("페이지를 찾을 수 없음\n"); /* Debug */
-		return false;
+
+		/* stack 증가(sp감소)로 인해서 발생한 pagefault일 때
+		 * 1. push로 인한 스택 증가 : 현재 스택포인터 다음 주소를 검사함 (rsp - 8 == addr)
+		 * 2. 함수 호출로 인한 스택 증가 : 스택포인터를 함수크기만큼 증가시키고 push함 (rsp <= addr)
+		 */
+		if (STACK_BOTTOM <= addr && ((f->rsp - 8) == addr || f->rsp <= addr) && addr <= USER_STACK)
+		{
+			// printf("stack으로 인한 페이지폴트"); /* Debug */
+			vm_stack_growth(addr);
+			return true;
+		}
+		// if (!user && ((thread_current()->saved_rsp - 8) == addr || thread_current()->saved_rsp <= addr) && addr <= USER_STACK)
+		// {
+		// 	vm_stack_growth(addr);
+		// 	return true;
+		// }
+		else
+			// printf("페이지를 찾을 수 없음\n"); /* Debug */
+			return false;
 	}
 
 	/* read-only에 write시도 */

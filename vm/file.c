@@ -1,6 +1,8 @@
 /* file.c: Implementation of memory backed file object (mmaped object). */
 
 #include "vm/vm.h"
+#include "threads/vaddr.h"
+#include "userprog/process.h"
 
 static bool file_backed_swap_in(struct page *page, void *kva);
 static bool file_backed_swap_out(struct page *page);
@@ -25,6 +27,7 @@ bool file_backed_initializer(struct page *page, enum vm_type type, void *kva)
 	/* Set up the handler */
 	// printf("start file_backed_initializer\n"); /* Debug */
 	page->operations = &file_ops;
+	page->anon.type = type;
 
 	struct file_page *file_page = &page->file;
 }
@@ -50,13 +53,70 @@ file_backed_destroy(struct page *page)
 	struct file_page *file_page UNUSED = &page->file;
 }
 
-/* Do the mmap */
-void *
-do_mmap(void *addr, size_t length, int writable,
-		struct file *file, off_t offset)
+static bool
+lazy_load_contents(struct page *page, void *aux)
 {
+	/* 페이지 확인 */
+	if (page == NULL)
+	{
+		// printf("page 가 null임\n"); /* Debug */
+		return false;
+	}
+
+	/* aux로 전달받은 변수 */
+	struct auxillary *auxi = aux;
+	struct file *file = auxi->file;
+	size_t page_read_bytes = auxi->prb;
+	size_t page_zero_bytes = auxi->pzb;
+	off_t ofs = auxi->ofs;
+
+	file_seek(file, ofs);
+
+	/* 할당된 페이지에 로드 */
+	if (file_read(file, page->frame->kva, page_read_bytes) != (off_t)page_read_bytes)
+	{
+		// printf("file_read 실패 \n"); /* Debug */
+		return false;
+	}
+
+	/* 페이지의 남은 부분을 0으로 채우기 */
+	memset(page->frame->kva + page_read_bytes, 0, page_zero_bytes);
+
+	/* aux 동적할당 해제 */
+	// printf("load 완료\n"); /* Debug */
+	free(aux);
+	return true;
 }
 
+/* Do the mmap */
+void *do_mmap(void *addr, size_t length, int writable,
+			  struct file *file, off_t offset)
+{
+	size_t read_bytes = length;
+	uint64_t *address = addr;
+
+	while (read_bytes > 0)
+	{
+		size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
+		size_t page_zero_bytes = PGSIZE - page_read_bytes;
+
+		struct auxillary *tmp = malloc(sizeof(struct auxillary));
+		tmp->file = file;
+		tmp->prb = page_read_bytes;
+		tmp->pzb = page_zero_bytes;
+		tmp->ofs = offset;
+		tmp->start_address = addr;
+
+		if (!vm_alloc_page_with_initializer(VM_FILE, address, writable, lazy_load_contents, tmp))
+			return NULL;
+
+		/* Advance. */
+		read_bytes -= page_read_bytes;
+		offset += page_read_bytes;
+		address += PGSIZE;
+	}
+	return addr;
+}
 /* Do the munmap */
 void do_munmap(void *addr)
 {
