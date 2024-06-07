@@ -983,8 +983,8 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 		}
 		aux_info->file = file;
 		aux_info->offset = ofs;
-		aux_info->read_bytes = read_bytes;
-		aux_info->zero_bytes = zero_bytes;
+		aux_info->read_bytes = page_read_bytes;
+		aux_info->zero_bytes = page_zero_bytes;
 
 		aux = aux_info;
 		if (!vm_alloc_page_with_initializer(VM_ANON, upage,

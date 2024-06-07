@@ -42,6 +42,10 @@ int write(int fd, const void *buffer, unsigned size);
 void seek(int fd, unsigned position);
 unsigned tell(int fd);
 void close(int fd);
+/*-------------------- project3 append------------------------------*/
+void *mmap(void *addr, size_t length, int writable, int fd, off_t offset);
+void munmap(void *addr);
+/*---------------------------------------------------------------*/
 
 /* System call.
  *
@@ -134,6 +138,20 @@ void syscall_handler(struct intr_frame *f UNUSED)
 	case SYS_CLOSE: /* Close an open file. */
 		close((int)f->R.rdi);
 		break;
+	case SYS_MMAP:
+		// void *mmap(void *addr, size_t length, int writable, int fd, off_t offset);
+		// 1번째 인자: %rdi
+		// 2번째 인자: %rsi
+		// 3번째 인자: %rdx
+		// 4번째 인자: %r10
+		// 5번째 인자: %r8
+		f->R.rax = mmap((void *)f->R.rdi, (size_t)f->R.rsi, (int)f->R.rdx, (int)f->R.r10, (off_t)f->R.r8);
+		break;
+	case SYS_MUNMAP:
+		// void munmap(void *addr);
+		// munmap();
+		break;
+
 	// case SYS_DUP2: /* 구현 실패... */
 	// 	dup2((int)f->R.rdi, (int)f->R.rsi);
 	// 	break;
@@ -534,6 +552,52 @@ void close(int fd)
 		remove_file_from_fdt(fd);
 	}
 }
+
+void *mmap(void *addr, size_t length, int writable, int fd, off_t offset)
+{
+	// 유효한 주소인지 확인
+	check_address(addr);
+
+	if (fd < 2 || MAX_FILES <= fd) // for write-bad-fd
+	{
+		return NULL; /* Ignore stdin and stdout. */
+	}
+
+	/* 파일길이가 0인 경우와 파일이 닫힌 경우 처리*/
+	if (filesize(fd) < 1)
+	{
+		return NULL;
+	}
+
+	void *check_addr = addr;
+	/* 중복된 페이지가 있는지 검사 -> while문으로 확인*/
+	while (check_addr < (length + addr))
+	{
+		if (!spt_find_page(&thread_current()->spt, addr))
+		{
+			return NULL;
+		}
+		check_addr += PGSIZE;
+	}
+
+	/* addr이 정렬된 페이지인지 확인*/
+	if (addr != pg_round_down(addr))
+	{
+		return NULL;
+	}
+
+	// 유효한 주소이면 do_mmap() 호출
+	if (do_mmap(addr, length, writable, get_file_from_fdt(fd), offset))
+	{
+		return addr;
+	}
+	return NULL;
+}
+
+// void munmap(void *addr)
+// {
+
+// }
 
 // /**
 //  * @brief Duplicates an existing file descriptor to a new file descriptor.

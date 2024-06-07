@@ -1,6 +1,10 @@
 /* file.c: Implementation of memory backed file object (mmaped object). */
 
 #include "vm/vm.h"
+#include "include/vm/vm.h"
+#include "include/userprog/process.h"
+#include "threads/malloc.h"
+#include "include/threads/mmu.h"
 
 static bool file_backed_swap_in(struct page *page, void *kva);
 static bool file_backed_swap_out(struct page *page);
@@ -24,6 +28,7 @@ bool file_backed_initializer(struct page *page, enum vm_type type, void *kva)
 {
 	/* Set up the handler */
 	page->operations = &file_ops;
+	page->file.type = type;
 
 	struct file_page *file_page = &page->file;
 }
@@ -49,11 +54,66 @@ file_backed_destroy(struct page *page)
 	struct file_page *file_page UNUSED = &page->file;
 }
 
-/* Do the mmap */
-void *
-do_mmap(void *addr, size_t length, int writable,
-		struct file *file, off_t offset)
+// 파일을 읽어서 메모리에 콘텐츠를 적재하는 함수
+static bool
+lazy_load_contents(struct page *page, void *aux)
 {
+	if (page == NULL)
+	{
+		return false;
+	}
+
+	lazy_load_info *info = aux;
+
+	page->is_loaded = true;
+	file_seek(info->file, info->offset);
+
+	// 파일에서 페이지를 읽어 메모리에 로드한다.
+	if (file_read(info->file, page->frame->kva, info->read_bytes) != (int)info->read_bytes)
+	{
+		// printf("lazyload 읽기 실패\n"); // debug
+		return false; // 파일 읽기 실패
+	}
+	memset(page->frame->kva + info->read_bytes, 0, info->zero_bytes);
+
+	// free(info); // unchecked aux malloc free/
+
+	return true;
+}
+
+/* Do the mmap */
+void *do_mmap(void *addr, size_t length, int writable, struct file *file, off_t offset)
+{
+
+	// 페이지 채우기
+	while (length > 0)
+	{
+		size_t page_read_bytes = length < PGSIZE ? length : PGSIZE;
+		size_t page_zero_bytes = PGSIZE - page_read_bytes;
+
+		/* Set up aux to pass information to the lazy_load_segment. */
+		void *aux = NULL;
+		lazy_load_info *aux_info = malloc(sizeof(struct lazy_load_info_t));
+
+		aux_info->file = file;
+		aux_info->offset = offset;
+		aux_info->read_bytes = page_read_bytes;
+		aux_info->zero_bytes = page_zero_bytes;
+		aux_info->start_addr = addr;
+
+		aux = aux_info;
+		if (!vm_alloc_page_with_initializer(VM_FILE, addr, writable, lazy_load_contents, aux))
+		{
+			return NULL;
+		}
+
+		// 다음 페이지로 이동
+		offset += page_read_bytes;
+		length -= page_read_bytes;
+		addr += PGSIZE;
+	}
+
+	return addr;
 }
 
 /* Do the munmap */

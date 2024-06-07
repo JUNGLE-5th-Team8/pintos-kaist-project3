@@ -16,6 +16,7 @@ typedef struct lazy_load_info_t
     off_t offset;      // 파일 내에서 읽기 시작할 위치
     size_t read_bytes; // 파일에서 읽을 바이트 수
     size_t zero_bytes; // 0으로 채울 바이트 수
+    void *start_addr;  // mmap에서 할당할 페이지 시작 주소
 } lazy_load_info;
 struct lock filesys_lock;
 
