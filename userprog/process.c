@@ -497,11 +497,11 @@ void process_exit(void)
 	// Notify parent that we are exiting. /* 부모에게 종료 상태를 알려줍니다. */
 	sema_up(&curr->wait_sema); // 자식 스레드가 종료될 때 대기하고 있는 부모에게 signal을 보낸다. // 종료되었다고 기다리고 있는 부모 thread에게 signal 보냄-> sema_up에서 val을 올려줌
 
-	// Wait for parent to acknowledge exit.
-	sema_down(&curr->exit_sema); // 자식 스레드가 완료되었음을 알리는 세마포어를 사용합니다. // 부모의 signal을 기다린다. 대기가 풀리고 나서 do_schedule(THREAD_DYING)이 이어져 다른 스레드가 실행된다. // 부모의 exit_Status가 정확히 전달되었는지 확인(wait)
-
 	// Clean up process resources.
 	process_cleanup(); // pml4를 해제(이 함수를 call 한 thread의 pml4)
+
+	// Wait for parent to acknowledge exit.
+	sema_down(&curr->exit_sema); // 자식 스레드가 완료되었음을 알리는 세마포어를 사용합니다. // 부모의 signal을 기다린다. 대기가 풀리고 나서 do_schedule(THREAD_DYING)이 이어져 다른 스레드가 실행된다. // 부모의 exit_Status가 정확히 전달되었는지 확인(wait)
 }
 
 /* Free the current process's resources. */
