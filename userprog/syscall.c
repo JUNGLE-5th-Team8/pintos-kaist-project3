@@ -562,6 +562,12 @@ void close(int fd)
 
 void *mmap(void *addr, size_t length, int writable, int fd, off_t offset)
 {
+	/* 커널 주소 접근 예외처리*/
+	if (is_kernel_vaddr(addr) || is_kernel_vaddr(addr - length))
+	{
+		return NULL;
+	}
+
 	if (length == 0)
 	{
 		return NULL;
@@ -597,6 +603,12 @@ void *mmap(void *addr, size_t length, int writable, int fd, off_t offset)
 
 	/* addr이 정렬된 페이지인지 확인*/
 	if (addr != pg_round_down(addr))
+	{
+		return NULL;
+	}
+
+	/* 유효하지 않은 offset 확인*/
+	if (offset % PGSIZE != 0)
 	{
 		return NULL;
 	}
