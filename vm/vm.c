@@ -15,7 +15,6 @@
 static bool child_copy_pm(struct page* page, void* aux);
 static bool spt_hash_less_func (const struct hash_elem *a,const struct hash_elem *b,void *aux);
 static uint64_t spt_hash_func(struct hash_elem* supplemental_hash_elem);
-static struct page* page_entry_from_hash_elem(struct hash_elem* supplemental_hash_elem);
 
 
 /* Initializes the virtual memory subsystem by invoking each subsystem's
@@ -95,12 +94,14 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 		new_page -> writable = writable;
 		new_page -> is_loaded = false;
 		new_page-> start_addr = start_addr;
-
 		// printf("vm_alloc_page_with_initializer : page va : %d\n",new_page->va);//debug
 		/* TODO: Insert the page into the spt. */
-		if(!spt_insert_page(spt,new_page)) return false;
+		if(!spt_insert_page(spt,new_page)){
+			return false;
+		}
+		return true;
 	}
-	return true;
+	return false;
 err:
 	return false;
 }
@@ -135,8 +136,14 @@ spt_insert_page (struct supplemental_page_table *spt UNUSED,
 
 void
 spt_remove_page (struct supplemental_page_table *spt, struct page *page) {
+	struct hash_elem* hash_elem_removed = hash_delete(spt, &page->spt_hash_elem);
+	if(hash_elem_removed==NULL){
+		printf("spt_remove_page spt에 page가 없음.");
+		exit(-1);
+	}
+	free(page->frame);
 	vm_dealloc_page (page);
-	return true;
+	return ;
 }
 
 /* Get the struct frame, that will be evicted. */
@@ -202,7 +209,7 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	struct page *page = NULL;
 	/* TODO: Validate the fault */
 	/* TODO: Your code goes here */
-
+	// printf("vm_try_handle_fault addr %p\n",addr);
 	if(!(page = spt_find_page(spt,addr))){
 		// printf("vm_try_handle_fault : page가 존재하지 않음. %#x\n",addr);
 		// printf("원인은 무엇인지 kenerl or user %d\n",user);
@@ -223,7 +230,12 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	// }
 
 	//spt_find_page를 통하여 fault address에 해당하는 페이지 구조체 얻기
-	return vm_do_claim_page (page);
+	if(!vm_do_claim_page (page)){
+		printf("vm_do_claim_page (page) 걸림\n");
+		return false;
+	}
+
+	return true;
 }
 
 /* Free the page.
@@ -275,6 +287,7 @@ vm_do_claim_page (struct page *page) {
 		printf("vm_do_claim_page : pml4_set_page fail 물리주소와 가상 주소 매핑 실패\n");
 		return false;
 	}
+	// printf("vm_do_claim_page : 왔다\n"); debug
 	
 	//물리 메모리를 공간을 만들고 page table entry와 연결했으면 
 	//page 정보를 통해 할당된 공간을 채워줘야 겠지.
@@ -286,15 +299,15 @@ void
 supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
 	hash_init(&spt->hash_table,spt_hash_func,spt_hash_less_func,NULL);
 }
-
-static bool spt_hash_less_func (const struct hash_elem *a,const struct hash_elem *b,void *aux){
+static
+bool spt_hash_less_func (const struct hash_elem *a,const struct hash_elem *b,void *aux){
 	void* a_va = page_entry_from_hash_elem(a)->va;
 	void* b_va = page_entry_from_hash_elem(b)->va;
 	return a_va < b_va;
 }
 
 //hash elem으로부터 page return, hash_elem이 null일 경우 null return
-static struct page* page_entry_from_hash_elem(struct hash_elem* supplemental_hash_elem){
+struct page* page_entry_from_hash_elem(struct hash_elem* supplemental_hash_elem){
 	if(supplemental_hash_elem==NULL){
 		return NULL;
 	}

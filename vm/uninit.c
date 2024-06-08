@@ -45,18 +45,20 @@ uninit_new (struct page *page, void *va, vm_initializer *init,
 /* Initalize the page on first fault */
 static bool
 uninit_initialize (struct page *page, void *kva) {
+	// printf("uninit_initialize1\n");
 	struct uninit_page *uninit = &page->uninit;
 
 	/* Fetch first, page_initialize may overwrite the values */
 	vm_initializer *init = uninit->init;
 	void *aux = uninit->aux;
-	
+
 	if(!uninit->page_initializer(page, uninit->type, kva)){
 		printf("page initailize 실패\n");
 		return false;
 	}
-
+	// printf("uninit_initialize2\n"); debug
 	if(init){
+		// printf("unin3\n"); debug
 		if(!init (page, aux)){
 			printf("init 실패\n");
 			// free(aux);

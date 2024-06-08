@@ -13,14 +13,17 @@ test_main (void)
   int handle;
   void *map;
   size_t i;
-
+  // printf("tlqkf\n");
   CHECK ((handle = open ("sample.txt")) > 1, "open \"sample.txt\"");
+  // printf("tlqkf2\n");
   CHECK ((map = mmap (actual, 4096, 0, handle, 0)) != MAP_FAILED, "mmap \"sample.txt\"");
+  // printf("%p\n",map);
+  // printf("tlqkf3\n");
 
   /* Check that data is correct. */
   if (memcmp (actual, sample, strlen (sample)))
     fail ("read of mmap'd file reported bad data");
-
+  // printf("tlqkf4\n");
   /* Verify that data is followed by zeros. */
   for (i = strlen (sample); i < 4096; i++)
     if (actual[i] != 0)

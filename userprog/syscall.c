@@ -180,17 +180,50 @@ void* sys_mmap(void *addr,size_t length,int writable,int fd, off_t offset)
 {
 	//나중에 input인지 output인지 검사해야할듯.
 	struct file* file =NULL;
-	check_address(addr);
-
-	if(!(file = get_file_from_fdt(fd))){
+	if(length==0){
 		return NULL;
 	}
 
+	// check_address(addr);
+	if(fd<2){
+		return NULL;
+	}
+	
 	if(filesize(fd) < 1){
 		return NULL;
 	}
 
-	return do_mmap(addr,length,writable,file,offset);
+	if(filesize(fd)-offset < length){
+		length = filesize(fd)-offset;
+	}
+
+	//파일의 길이가 0인지 확인 file size
+	//addr가 page로 정렬된 부분이 아니라면
+	if(addr != pg_round_down(addr)){
+		return NULL;
+	}
+
+	//map할 위치에 어느 페이지와 주소가 겹친다면
+	for(void* page_addr = addr; page_addr<(addr+length); page_addr+=PGSIZE){
+		if(spt_find_page(&thread_current()->spt,page_addr)){
+			return NULL;
+		}
+	}
+	
+	// printf("여기까진 되야함\n"); debug
+	//console input이나 output descriptor는 null return하도록 구현
+	//lazy load segment와 lazy_load_info를 이용해서 파일을 읽을 수 있을듯.
+	//page struct에 start_address추가
+	//type은 vm_file
+
+	if(do_mmap(addr,length,writable,get_file_from_fdt(fd),offset)){
+		if(spt_find_page(&thread_current()->spt,addr)){
+			// printf("addr  %p\n",addr); debug
+		}
+		return addr;
+	}
+
+	return NULL;
 }
 
 // 파일 객체에 대한 파일 디스크립터를 생성하는 함수
