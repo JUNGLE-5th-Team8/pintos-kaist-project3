@@ -89,7 +89,7 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
 		/* Insert the page into the spt. */
 		if (spt_insert_page(spt, new_page))
 		{
-			// printf("spt 에 uninit page구조체 삽입 성공\n\n"); /* Debug */
+			// printf("spt 에 uninit page구조체 삽입 성공 addr : %p\n\n", upage); /* Debug */
 			return true;
 		}
 	}
@@ -147,6 +147,11 @@ bool spt_insert_page(struct supplemental_page_table *spt UNUSED,
 
 void spt_remove_page(struct supplemental_page_table *spt, struct page *page)
 {
+	struct hash_elem *he = hash_delete(&spt->hash_table, &page->hash_elem);
+	if (he != NULL)
+	{
+		free(page->frame);
+	}
 	vm_dealloc_page(page);
 	return true;
 }
@@ -234,6 +239,9 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 	/* TODO: Validate the fault */
 	/* TODO: Your code goes here */
 
+	if (addr == NULL)
+		return false;
+
 	/* user가 kernel영역에 접근한 경우 */
 	if (user && is_kernel_vaddr(addr))
 	{
@@ -259,14 +267,14 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 			vm_stack_growth(addr);
 			return true;
 		}
-		// if (!user && ((thread_current()->saved_rsp - 8) == addr || thread_current()->saved_rsp <= addr) && addr <= USER_STACK)
+		// if (!user && STACK_BOTTOM <= thread_current()->saved_rsp && (thread_current()->saved_rsp <= addr) && addr <= USER_STACK)
 		// {
+		// 	printf("stack으로 인한 페이지폴트2"); /* Debug */
 		// 	vm_stack_growth(addr);
 		// 	return true;
 		// }
-		else
-			// printf("페이지를 찾을 수 없음\n"); /* Debug */
-			return false;
+		// printf("페이지를 찾을 수 없음\n"); /* Debug */
+		return false;
 	}
 
 	/* read-only에 write시도 */
@@ -422,10 +430,9 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 void hash_action_clear(struct hash_elem *hash_e, void *aux)
 {
 	struct page *page = hash_entry(hash_e, struct page, hash_elem);
-	// list_remove(&hash_e->list_elem);
+	free(page->frame);
 	destroy(page);
 	// palloc_free_page(page->frame->kva); pml4에서 알아서 해준다고 함
-	free(page->frame);
 	free(page);
 }
 

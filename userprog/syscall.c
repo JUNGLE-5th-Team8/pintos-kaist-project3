@@ -620,7 +620,11 @@ void *mmap(void *addr, size_t length, int writable, int fd, off_t offset)
 		// printf("fd로 열린 파일의 길이를 넘음\n"); /* Debug */
 		return NULL;
 	}
-	length = length > filesize(fd) ? filesize(fd) : length;
+
+	if (length > filesize(fd))
+	{
+		length = filesize(fd);
+	}
 
 	/* 페이지 정렬 검사 */
 	if (pg_round_down(addr) != addr)
@@ -641,9 +645,12 @@ void *mmap(void *addr, size_t length, int writable, int fd, off_t offset)
 	if (addr == do_mmap(addr, length, writable, get_file_from_fdt(fd), offset))
 	{
 		// printf("do_mmap후 addr : %p\n", addr); /* Debug */
-		// if (spt_find_page(&thread_current()->spt, addr))
-		// printf("do_mmap성공\n"); /* Debug */
-		return addr;
+		if (spt_find_page(&thread_current()->spt, addr))
+		{
+			// printf("do_mmap성공\n"); /* Debug */
+			return addr;
+		}
+		// return addr;
 	}
 	// printf("do_mmap실패\n"); /* Debug */
 	return NULL;
@@ -658,14 +665,14 @@ void munmap(void *addr)
 	struct page *page = spt_find_page(&thread_current()->spt, addr);
 	if (page == NULL || page->file.type != VM_FILE)
 	{
-		printf("이미 해제됐거나 VM_FILE이 아님\n");
+		// printf("이미 해제됐거나 VM_FILE이 아님\n");
 		return;
 	}
 
 	/* addr가 mmap호출로 반환된 주소가 아닐 경우 */
 	if (addr != page->start_address)
 	{
-		printf("addr != page->start_address\n");
+		// printf("addr != page->start_address\n");
 		return;
 	}
 	do_munmap(addr);

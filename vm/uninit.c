@@ -55,7 +55,7 @@ uninit_initialize(struct page *page, void *kva)
 	page->is_loaded = true;
 	/* TODO: You may need to fix this function. */
 
-	return (init ? init(page, aux) : true) && uninit->page_initializer(page, uninit->type, kva);
+	return uninit->page_initializer(page, uninit->type, kva) && (init ? init(page, aux) : true);
 }
 
 /* Free the resources hold by uninit_page. Although most of pages are transmuted
