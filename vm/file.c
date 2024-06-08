@@ -65,6 +65,7 @@ file_backed_destroy(struct page *page)
 static bool
 lazy_load_contents(struct page *page, void *aux)
 {
+	// printf("lazy_load_contents\n");
 	/* 페이지 확인 */
 	if (page == NULL)
 	{
@@ -162,77 +163,61 @@ void *do_mmap(void *addr, size_t length, int writable,
 	return addr;
 }
 /* Do the munmap */
-void do_munmap(void *addr)
-{
-	struct page *page;
-
-	void *check_addr;
-	// page != null
-	while (page = spt_find_page(&thread_current()->spt, check_addr))
-	{
-		// 파일의 전체 페이지인지 순회하면서 체크
-		if (page->start_address == addr)
-		{
-			// printf("언맵이 돌아가나?\n");
-			// 페이지 쓰기 여부 확인후 파일에 다시 쓰기
-			if (page->frame == NULL)
-			{
-				// 페이지가 dirty (true)하면 = 쓰기를 했으면
-				if (pml4_is_dirty(&thread_current()->pml4, check_addr))
-				{
-					// 파일에 다시 써준다.
-					struct auxillary *auxi = page->file.aux;
-					file_write_at(auxi->file, check_addr, auxi->prb, auxi->ofs);
-				}
-			}
-
-			// spt에서 프레임 반환 및 페이지 삭제
-			spt_remove_page(&thread_current()->spt, page);
-		}
-		check_addr += PGSIZE;
-	}
-}
 // void do_munmap(void *addr)
 // {
-// 	// printf("do_munmap시작 addr : %p \n", addr);
-// 	struct page *page = spt_find_page(&thread_current()->spt, addr);
-// 	void *s_addr = page->start_address;
+// 	struct page *page;
 
-// 	while (page = spt_find_page(&thread_current()->spt, addr))
+// 	void *check_addr;
+// 	// page != null
+// 	while (page = spt_find_page(&thread_current()->spt, check_addr))
 // 	{
-// 		/* 페이지의 시작주소가 다르면 다른 파일이다 */
-// 		if (page == NULL || s_addr != page->start_address)
-// 			break;
-
-// 		// /* 아직 프레임이 할당되지 않았으면 spt에서 삭제하고 넘어감 */
-// 		// if (page->frame == NULL)
-// 		// {
-// 		// 	// printf("할당되지 않은 페이지\n");
-// 		// 	spt_remove_page(&thread_current()->spt, page);
-// 		// 	addr += PGSIZE;
-// 		// 	continue;
-// 		// }
-
-// 		// /* 수정되지 않았으면 spt에서 삭제하고, frame free하고 넘어감 */
-// 		// if (!pml4_is_dirty(thread_current()->pml4, addr))
-// 		// {
-// 		// 	// printf("수정되지 않은 페이지\n");
-// 		// 	spt_remove_page(&thread_current()->spt, page);
-// 		// 	// free(page->frame);
-// 		// 	addr += PGSIZE;
-// 		// 	continue;
-// 		// }
-
-// 		/* 프레임이 할당되었고 수정되었으면 파일에 적음 */
-// 		if (page->frame != NULL && pml4_is_dirty(thread_current()->pml4, addr))
+// 		// 파일의 전체 페이지인지 순회하면서 체크
+// 		if (page->start_address == addr)
 // 		{
-// 			struct auxillary *auxi = page->file.aux;
-// 			file_write_at(auxi->file, addr, auxi->prb, auxi->ofs);
+// 			// printf("언맵이 돌아가나?\n");
+// 			// 페이지 쓰기 여부 확인후 파일에 다시 쓰기
+// 			if (page->frame == NULL)
+// 			{
+// 				// 페이지가 dirty (true)하면 = 쓰기를 했으면
+// 				if (pml4_is_dirty(&thread_current()->pml4, check_addr))
+// 				{
+// 					// 파일에 다시 써준다.
+// 					struct auxillary *auxi = page->file.aux;
+// 					file_write_at(auxi->file, check_addr, auxi->prb, auxi->ofs);
+// 				}
+// 			}
+
+// 			// spt에서 프레임 반환 및 페이지 삭제
+// 			spt_remove_page(&thread_current()->spt, page);
 // 		}
-// 		// printf("할당 + 수정\n");
-// 		struct auxillary *auxi = page->file.aux;
-// 		file_write_at(auxi->file, addr, auxi->prb, auxi->ofs);
-// 		spt_remove_page(&thread_current()->spt, page);
-// 		addr += PGSIZE;
+// 		check_addr += PGSIZE;
 // 	}
 // }
+void do_munmap(void *addr)
+{
+	// printf("do_munmap시작 addr : %p \n", addr);
+	struct page *page = spt_find_page(&thread_current()->spt, addr);
+	void *s_addr = page->start_address;
+
+	while (page = spt_find_page(&thread_current()->spt, addr))
+	{
+
+		/* 페이지의 시작주소가 다르면 다른 파일이다 */
+		if (page == NULL || s_addr != page->start_address)
+			break;
+
+		// page->start_address = NULL;
+
+		/* 프레임이 할당되었고 수정되었으면 파일에 적음 */
+		if (page->frame != NULL && pml4_is_dirty(thread_current()->pml4, addr))
+		{
+			struct auxillary *auxi = page->file.aux;
+			file_write_at(auxi->file, addr, auxi->prb, auxi->ofs);
+		}
+
+		struct auxillary *auxi = page->file.aux;
+		file_write_at(auxi->file, addr, auxi->prb, auxi->ofs);
+		spt_remove_page(&thread_current()->spt, page);
+		addr += PGSIZE;
+	}
+}

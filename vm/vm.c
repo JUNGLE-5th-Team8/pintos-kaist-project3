@@ -430,6 +430,9 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 void hash_action_clear(struct hash_elem *hash_e, void *aux)
 {
 	struct page *page = hash_entry(hash_e, struct page, hash_elem);
+
+	// do_munmap(page);
+
 	free(page->frame);
 	destroy(page);
 	// palloc_free_page(page->frame->kva); pml4에서 알아서 해준다고 함

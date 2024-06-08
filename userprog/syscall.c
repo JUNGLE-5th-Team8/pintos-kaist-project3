@@ -621,9 +621,9 @@ void *mmap(void *addr, size_t length, int writable, int fd, off_t offset)
 		return NULL;
 	}
 
-	if (length > filesize(fd))
+	if (length > filesize(fd) - offset)
 	{
-		length = filesize(fd);
+		length = filesize(fd) - offset;
 	}
 
 	/* 페이지 정렬 검사 */
