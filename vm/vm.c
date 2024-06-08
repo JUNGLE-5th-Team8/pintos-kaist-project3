@@ -82,11 +82,15 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
 		{
 		case VM_ANON:
 			page_initializer = anon_initializer;
+			uninit_new(page, upage, init, type, aux, page_initializer);
+
+			page->start_address = NULL;
 			break;
 
 		case VM_FILE:;
 			lazy_load_info *aux_info = aux;
 			page_initializer = file_backed_initializer;
+			uninit_new(page, upage, init, type, aux, page_initializer);
 			page->start_address = aux_info->start_addr;
 			break;
 
@@ -94,7 +98,6 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
 			break;
 		}
 
-		uninit_new(page, upage, init, type, aux, page_initializer);
 		page->writable = writable;
 		page->is_loaded = false;
 		if (spt_insert_page(spt, page))
@@ -248,7 +251,7 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 	/* TODO: Validate the fault */
 	/* TODO: Your code goes here */
 	// printf("페이지폴트핸들러 fault addr:%p\n", addr); // debug
-
+	// printf("vm핸들러addr:%p\n", addr);
 	if (!is_user_vaddr(addr) || addr == NULL)
 	{
 		// printf("유효하지 않은 주소 접근 찐 page fault!\n"); // debug
@@ -412,6 +415,11 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 static void hash_action_clear(struct hash_elem *e, void *aux)
 {
 	struct page *page = hash_entry(e, struct page, hash_elem);
+	if (page->start_address != NULL)
+	{
+		do_munmap(page->start_address); // 프로세스 종료하기전에 unmap 진행
+	}
+
 	free(page->frame);
 	destroy(page);
 	free(page);

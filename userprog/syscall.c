@@ -263,6 +263,7 @@ void exit(int status)
 	struct thread *curr = thread_current();
 	curr->exit_status = status;
 	printf("%s: exit(%d)\n", curr->name, status); // Process Termination Message /* 정상적으로 종료됐다면 status는 0 */
+
 	thread_exit();
 }
 
@@ -561,7 +562,10 @@ void close(int fd)
 
 void *mmap(void *addr, size_t length, int writable, int fd, off_t offset)
 {
-	// printf("엠맵이 돌아가나?\n");
+	if (length == 0)
+	{
+		return NULL;
+	}
 
 	if (fd < 2 || MAX_FILES <= fd) // for write-bad-fd
 	{
@@ -575,9 +579,9 @@ void *mmap(void *addr, size_t length, int writable, int fd, off_t offset)
 	}
 
 	/* 파일길이를 파일 사이즈로 맞춰줌 */
-	if (length > filesize(fd))
+	if (length > filesize(fd) - offset)
 	{
-		length = filesize(fd);
+		length = filesize(fd) - offset;
 	}
 
 	void *check_addr = addr;
@@ -600,6 +604,7 @@ void *mmap(void *addr, size_t length, int writable, int fd, off_t offset)
 	// 유효한 주소이면 do_mmap() 호출
 	if (do_mmap(addr, length, writable, get_file_from_fdt(fd), offset))
 	{
+		// printf("addr: %p", addr);
 		return addr;
 	}
 	return NULL;

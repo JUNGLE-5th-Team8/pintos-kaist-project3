@@ -134,25 +134,36 @@ void *do_mmap(void *addr, size_t length, int writable, struct file *file, off_t 
 /* Do the munmap */
 void do_munmap(void *addr)
 {
+	// printf("파일 다시쓰기 성공?\n");
+
 	struct page *page;
 
-	void *check_addr;
+	void *check_addr = addr;
 	// page != null
 	while (page = spt_find_page(&thread_current()->spt, check_addr))
 	{
+		// printf("파일 다시쓰기 성공22222?\n");
+
 		// 파일의 전체 페이지인지 순회하면서 체크
+		// printf("start_address:%p addr:%p\n", page->start_address, addr);
 		if (page->start_address == addr)
 		{
-			printf("언맵이 돌아가나?\n");
+			// printf("파일 다시쓰기 성공333333333?\n");
+			page->start_address = NULL;
+			// printf("언맵이 돌아가나?\n");
 			// 페이지 쓰기 여부 확인후 파일에 다시 쓰기
-			if (page->frame == NULL)
+			if (page->frame != NULL)
 			{
+				// printf("파일 다시쓰기 444444444444?\n");
 				// 페이지가 dirty (true)하면 = 쓰기를 했으면
-				if (pml4_is_dirty(&thread_current()->pml4, check_addr))
+				if (pml4_is_dirty(thread_current()->pml4, check_addr))
 				{
+					// printf("파일 다시쓰기 성공?????????????????????\n");
+
 					// 파일에 다시 써준다.
 					lazy_load_info *aux = page->file.aux;
 					file_write_at(aux->file, check_addr, aux->read_bytes, aux->offset);
+					// printf("파일 다시쓰기 성공?\n");
 				}
 			}
 
