@@ -155,6 +155,7 @@ void check_file(const char *file_name, const void *buf, size_t size)
   CHECK((fd = open(file_name)) > 1, "open \"%s\" for verification",
         file_name);
   check_file_handle(fd, file_name, buf, size);
+
   msg("close \"%s\"", file_name);
   close(fd);
 }
@@ -176,11 +177,14 @@ void compare_bytes(const void *read_data_, const void *expected_data_, size_t si
   for (j = i + 1; j < size; j++)
     if (read_data[j] == expected_data[j])
       break;
+  printf("여기서실패?6666666666666666666666\n");
 
   quiet = false;
   msg("%zu bytes read starting at offset %zu in \"%s\" differ "
       "from expected.",
       j - i, ofs + i, file_name);
+  printf("여기서실패?777777777777777777777777\n");
+
   show_cnt = j - i;
   if (j - i > 64)
   {
@@ -191,7 +195,10 @@ void compare_bytes(const void *read_data_, const void *expected_data_, size_t si
   hex_dump(ofs + i, read_data + i, show_cnt, true);
   msg("Expected data:");
   hex_dump(ofs + i, expected_data + i, show_cnt, true);
+  printf("여기서실패?888888888888888888888888888888\n");
+
   fail("%zu bytes read starting at offset %zu in \"%s\" differ "
        "from expected",
        j - i, ofs + i, file_name);
+  printf("여기서실패?9999999999999999999999999\n");
 }

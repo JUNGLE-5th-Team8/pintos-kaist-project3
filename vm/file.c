@@ -64,8 +64,20 @@ file_backed_destroy(struct page *page)
 	struct file_page *file_page UNUSED = &page->file;
 	// aux->file = close
 	// aux = free
-
 	// file_close(file_page->aux->file);
+	if (page->frame != NULL)
+	{
+
+		// 페이지가 dirty (true)하면 = 쓰기를 했으면
+		if (pml4_is_dirty(thread_current()->pml4, page->start_address))
+		{
+			lazy_load_info *aux = page->file.aux;
+
+			// 파일에 다시 써준다.
+			file_write_at(aux->file, page->start_address, aux->read_bytes, aux->offset);
+		}
+	}
+
 	free(file_page->aux);
 }
 
@@ -100,6 +112,7 @@ lazy_load_contents(struct page *page, void *aux)
 void *do_mmap(void *addr, size_t length, int writable, struct file *file, off_t offset)
 {
 
+	void *check_addr = addr;
 	// 페이지 채우기
 	while (length > 0)
 	{
@@ -114,10 +127,10 @@ void *do_mmap(void *addr, size_t length, int writable, struct file *file, off_t 
 		aux_info->offset = offset;
 		aux_info->read_bytes = page_read_bytes;
 		aux_info->zero_bytes = page_zero_bytes;
-		aux_info->start_addr = addr;
+		aux_info->start_addr = check_addr;
 
 		aux = aux_info;
-		if (!vm_alloc_page_with_initializer(VM_FILE, addr, writable, lazy_load_contents, aux))
+		if (!vm_alloc_page_with_initializer(VM_FILE, check_addr, writable, lazy_load_contents, aux))
 		{
 			return NULL;
 		}
@@ -125,7 +138,7 @@ void *do_mmap(void *addr, size_t length, int writable, struct file *file, off_t 
 		// 다음 페이지로 이동
 		offset += page_read_bytes;
 		length -= page_read_bytes;
-		addr += PGSIZE;
+		check_addr += PGSIZE;
 	}
 
 	return addr;
@@ -134,27 +147,21 @@ void *do_mmap(void *addr, size_t length, int writable, struct file *file, off_t 
 /* Do the munmap */
 void do_munmap(void *addr)
 {
-	// printf("파일 다시쓰기 성공?\n");
-
-	struct page *page;
+	struct page *page = NULL;
 
 	void *check_addr = addr;
+	page = spt_find_page(&thread_current()->spt, addr);
+
 	// page != null
 	while (page = spt_find_page(&thread_current()->spt, check_addr))
 	{
-		// printf("파일 다시쓰기 성공22222?\n");
-
 		// 파일의 전체 페이지인지 순회하면서 체크
-		// printf("start_address:%p addr:%p\n", page->start_address, addr);
 		if (page->start_address == addr)
 		{
-			// printf("파일 다시쓰기 성공333333333?\n");
 			page->start_address = NULL;
-			// printf("언맵이 돌아가나?\n");
 			// 페이지 쓰기 여부 확인후 파일에 다시 쓰기
 			if (page->frame != NULL)
 			{
-				// printf("파일 다시쓰기 444444444444?\n");
 				// 페이지가 dirty (true)하면 = 쓰기를 했으면
 				if (pml4_is_dirty(thread_current()->pml4, check_addr))
 				{
@@ -163,13 +170,13 @@ void do_munmap(void *addr)
 					// 파일에 다시 써준다.
 					lazy_load_info *aux = page->file.aux;
 					file_write_at(aux->file, check_addr, aux->read_bytes, aux->offset);
-					// printf("파일 다시쓰기 성공?\n");
 				}
 			}
 
 			// spt에서 프레임 반환 및 페이지 삭제
 			spt_remove_page(&thread_current()->spt, page);
 		}
+
 		check_addr += PGSIZE;
 	}
 }
