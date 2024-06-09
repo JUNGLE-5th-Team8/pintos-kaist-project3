@@ -451,10 +451,12 @@ int process_wait(tid_t child_tid UNUSED)
 	// 자식이 종료될 때까지 부모를 재운다. (process_exit에서 자식이 종료될 때 sema_up 해줄 것이다.)
 	sema_down(&child->wait_sema);
 	// 자식이 종료됨을 알리는 `wait_sema` signal을 받으면 -> 재운 부모가 깨어남
+
 	// 자식의 종료 상태를 가져온다.
 	int exit_status = child->exit_status;
 	// 현재 스레드(부모)의 자식 리스트에서 제거한다.
 	list_remove(&child->child_elem);
+
 	// 자식이 완전히 종료되고 스케줄링이 이어질 수 있도록 자식에게 signal을 보낸다.
 	sema_up(&child->exit_sema);
 
@@ -494,11 +496,11 @@ void process_exit(void)
 	// file_close(curr->run_file); // 현재 실행 중인 파일을 닫는다. // for rox- (실행중에 수정 못하도록)
 	// curr->run_file = NULL;
 
-	// Notify parent that we are exiting. /* 부모에게 종료 상태를 알려줍니다. */
-	sema_up(&curr->wait_sema); // 자식 스레드가 종료될 때 대기하고 있는 부모에게 signal을 보낸다. // 종료되었다고 기다리고 있는 부모 thread에게 signal 보냄-> sema_up에서 val을 올려줌
-
 	// Clean up process resources.
 	process_cleanup(); // pml4를 해제(이 함수를 call 한 thread의 pml4)
+
+	// Notify parent that we are exiting. /* 부모에게 종료 상태를 알려줍니다. */
+	sema_up(&curr->wait_sema); // 자식 스레드가 종료될 때 대기하고 있는 부모에게 signal을 보낸다. // 종료되었다고 기다리고 있는 부모 thread에게 signal 보냄-> sema_up에서 val을 올려줌
 
 	// Wait for parent to acknowledge exit.
 	sema_down(&curr->exit_sema); // 자식 스레드가 완료되었음을 알리는 세마포어를 사용합니다. // 부모의 signal을 기다린다. 대기가 풀리고 나서 do_schedule(THREAD_DYING)이 이어져 다른 스레드가 실행된다. // 부모의 exit_Status가 정확히 전달되었는지 확인(wait)

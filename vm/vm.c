@@ -382,7 +382,10 @@ void supplemental_page_table_init(struct supplemental_page_table *spt UNUSED)
 bool copy_child(struct page *child, void *aux)
 {
 	// struct page *parent = aux;
+
+	lock_acquire(&filesys_lock);
 	memcpy(child->frame->kva, aux, PGSIZE);
+	lock_release(&filesys_lock);
 	return true;
 }
 

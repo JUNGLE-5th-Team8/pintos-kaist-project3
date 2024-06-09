@@ -64,32 +64,21 @@ file_backed_destroy(struct page *page)
 	/* page가 mmap되었고 munmap되지 않았으면 (spt에 존재) */
 
 	/* 프레임이 할당되었고 수정되었으면 파일에 적음 */
-	// printf("start_addr : %p\n", page->start_address);
-	// printf("is dirty ?? : %d\n", pml4_is_dirty(thread_current()->pml4, page->va));
-	// printf("page->frame 이 할당되었나?? : %d\n", page->frame != NULL);
 	// if (page->start_address == page)
 	// {
 	if (page->frame != NULL && pml4_is_dirty(thread_current()->pml4, page->va))
 	{
-		// printf("va에 저장되어 있는 값 :\n");
 		struct auxillary *auxi = file_page->aux;
-		// hex_dump(auxi->ofs, page->va, 64, true); /* debug */
-		// printf("aux->file : %p\n", auxi->file);
-		// printf("auxi->prb : %d\n", auxi->prb);
-		// printf("auxi->ofs : %d\n", auxi->ofs);
-		// printf("file_tell ::: %d\n", file_tell(auxi->file));
-		file_seek(auxi->file, auxi->ofs);
+
+		// lock_acquire(&filesys_lock);
+		// file_seek(auxi->file, auxi->ofs);
 		if (file_tell(auxi->file) == auxi->ofs)
 		{
 			// printf("포지션 같음\n\n");
 		}
-		// file_deny_write(auxi->file);
-		// off_t write_cnt = file_write_at(auxi->file, page->va, 512, auxi->ofs);
-		off_t write_cnt = file_write(auxi->file, page->va, auxi->prb);
-		// printf("쓰기 성공 후 파일에 들어간 값 : %d\n", write_cnt);
-		// printf("쓰기 성공 : %d\n", write_cnt);
-		// hex_dump(auxi->ofs, auxi->file, 64, true); /* debug */
-		// printf("\n\n\n");
+		off_t write_cnt = file_write_at(auxi->file, page->va, auxi->prb, auxi->ofs);
+		// off_t write_cnt = file_write(auxi->file, page->va, auxi->prb);
+		// lock_release(&filesys_lock);
 	}
 	// file_close(((struct auxillary *)(file_page->aux))->file);
 	free(file_page->aux);
@@ -111,10 +100,13 @@ lazy_load_contents(struct page *page, void *aux)
 	struct auxillary *auxi = aux;
 
 	page->is_loaded = true;
-	file_seek(auxi->file, auxi->ofs);
 
 	/* 할당된 페이지에 로드 */
+	// lock_acquire(&filesys_lock);
+	file_seek(auxi->file, auxi->ofs);
 	off_t result = file_read(auxi->file, page->frame->kva, auxi->prb);
+	// lock_release(&filesys_lock);
+
 	// printf("page_read_bytes : %d\n", page_read_bytes);
 	// printf("result : %d\n", result);
 	if (result != auxi->prb)
@@ -132,39 +124,6 @@ lazy_load_contents(struct page *page, void *aux)
 }
 
 /* Do the mmap */
-// void *do_mmap(void *addr, size_t length, int writable, struct file *file, off_t offset)
-// {
-
-// 	// 페이지 채우기
-// 	while (length > 0)
-// 	{
-// 		size_t page_read_bytes = length < PGSIZE ? length : PGSIZE;
-// 		size_t page_zero_bytes = PGSIZE - page_read_bytes;
-
-// 		/* Set up aux to pass information to the lazy_load_segment. */
-// 		void *aux = NULL;
-// 		struct auxillary *aux_info = malloc(sizeof(struct auxillary));
-
-// 		aux_info->file = file_reopen(file); // 매핑된 파일 살리기 위해 구조체 재설정해줌.
-// 		aux_info->ofs = offset;
-// 		aux_info->prb = page_read_bytes;
-// 		aux_info->pzb = page_zero_bytes;
-// 		aux_info->start_address = addr;
-
-// 		aux = aux_info;
-// 		if (!vm_alloc_page_with_initializer(VM_FILE, addr, writable, lazy_load_contents, aux))
-// 		{
-// 			return NULL;
-// 		}
-
-// 		// 다음 페이지로 이동
-// 		offset += page_read_bytes;
-// 		length -= page_read_bytes;
-// 		addr += PGSIZE;
-// 	}
-
-// 	return addr;
-// }
 void *do_mmap(void *addr, size_t length, int writable,
 			  struct file *file, off_t offset)
 {
@@ -172,7 +131,9 @@ void *do_mmap(void *addr, size_t length, int writable,
 	size_t read_bytes = length;
 	void *address = addr;
 
+	// lock_acquire(&filesys_lock);
 	struct file *reopen_file = file_reopen(file);
+	// lock_release(&filesys_lock);
 	while (read_bytes > 0)
 	{
 		// printf("do_mmap ||| addr : %p\n", address);
@@ -199,6 +160,7 @@ void *do_mmap(void *addr, size_t length, int writable,
 	// printf("spt에서 찾은 결과 : %p\n", spt_find_page(&thread_current()->spt, addr));
 	return addr;
 }
+
 /* Do the munmap */
 // void do_munmap(void *addr)
 // {
@@ -247,6 +209,7 @@ void do_munmap(void *addr)
 	struct page *page;
 	void *s_addr = page->start_address;
 
+	// lock_acquire(&filesys_lock);
 	while (page = spt_find_page(&thread_current()->spt, addr))
 	{
 
@@ -260,18 +223,12 @@ void do_munmap(void *addr)
 		if (page->frame != NULL && pml4_is_dirty(thread_current()->pml4, addr))
 		{
 			struct auxillary *auxi = page->file.aux;
-
-			// printf("munmap 시작 :\n");
-			// hex_dump(0, auxi->file, 64, true); /* debug */
-			// printf("\n\n");
+			// lock_acquire(&filesys_lock);
 			file_write_at(auxi->file, addr, auxi->prb, auxi->ofs);
-
-			// hex_dump(0, auxi->file, 64, true); /* debug */
+			// lock_release(&filesys_lock);
 		}
-
-		// struct auxillary *auxi = page->file.aux;
-		// file_write_at(auxi->file, addr, auxi->prb, auxi->ofs);
 		spt_remove_page(&thread_current()->spt, page);
 		addr += PGSIZE;
 	}
+	// lock_release(&filesys_lock);
 }

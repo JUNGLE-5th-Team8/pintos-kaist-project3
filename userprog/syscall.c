@@ -590,13 +590,22 @@ void close(int fd)
 
 void *mmap(void *addr, size_t length, int writable, int fd, off_t offset)
 {
-	// printf("check_address전 addr : %p\n", addr); /* Debug */
-	// check_address(addr);
-	// printf("check_address후 addr : %p\n", addr);
 	/* addr가 NULL이면 실패 (실제 리눅스에서는 커널이 매핑할 주소를 찾아줌) */
 	if (addr == NULL)
 	{
 		// printf("addr가 NULL\n"); /* Debug */
+		return NULL;
+	}
+
+	/* 커널 주소에 mmap시도 불가능 */
+	if (is_kernel_vaddr(addr) || is_kernel_vaddr(addr - length))
+	{
+		return NULL;
+	}
+
+	/* 유효하지 않은 offset 확인 */
+	if (offset % PGSIZE != 0)
+	{
 		return NULL;
 	}
 
@@ -615,15 +624,27 @@ void *mmap(void *addr, size_t length, int writable, int fd, off_t offset)
 	}
 
 	/* fd로 열린 파일의 길이가 0바이트 인 경우 실패(파일이 안열려 있으면 -1) */
-	if (filesize(fd) < 1)
+	int file_len = filesize(fd);
+	if (file_len < 1 || file_len <= offset)
 	{
 		// printf("fd로 열린 파일의 길이를 넘음\n"); /* Debug */
 		return NULL;
 	}
 
-	if (length > filesize(fd) - offset)
+	if (length > file_len - offset)
 	{
-		length = filesize(fd) - offset;
+		length = file_len - offset;
+	}
+
+	void *check_addr = addr;
+	/* 중복된 페이지가 있는지 검사 -> while문으로 확인*/
+	while (check_addr < (length + addr))
+	{
+		if (spt_find_page(&thread_current()->spt, check_addr))
+		{
+			return NULL;
+		}
+		check_addr += PGSIZE;
 	}
 
 	/* 페이지 정렬 검사 */
@@ -659,6 +680,11 @@ void *mmap(void *addr, size_t length, int writable, int fd, off_t offset)
 void munmap(void *addr)
 {
 	// check_address(addr);
+	/* 커널 주소에 munmap시도 불가능 */
+	if (addr == NULL || is_kernel_vaddr(addr))
+	{
+		return;
+	}
 
 	// printf("munmap 시작 addr: %p\n", addr);
 	/* 할당된 주소여야 함 */
