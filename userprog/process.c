@@ -933,13 +933,13 @@ lazy_load_segment(struct page *page, void *aux)
 	if (!lock_held_by_current_thread(&filesys_lock))
 	{
 		lock_acquire(&filesys_lock);
-		file_seek(info->file, info->offset);
 		flag = true;
-		if (flag)
-		{
-			lock_release(&filesys_lock);
-			flag = false;
-		}
+	}
+	file_seek(info->file, info->offset);
+	if (flag)
+	{
+		lock_release(&filesys_lock);
+		flag = false;
 	}
 
 	// merger test lock

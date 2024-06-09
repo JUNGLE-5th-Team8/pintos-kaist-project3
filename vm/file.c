@@ -79,12 +79,12 @@ file_backed_destroy(struct page *page)
 			{
 				lock_acquire(&filesys_lock);
 				flag = true;
-				file_write_at(aux->file, page->start_address, aux->read_bytes, aux->offset);
-				if (flag)
-				{
-					lock_release(&filesys_lock);
-					flag = false;
-				}
+			}
+			file_write_at(aux->file, page->start_address, aux->read_bytes, aux->offset);
+			if (flag)
+			{
+				lock_release(&filesys_lock);
+				flag = false;
 			}
 		}
 	}
@@ -111,12 +111,12 @@ lazy_load_contents(struct page *page, void *aux)
 	{
 		lock_acquire(&filesys_lock);
 		flag = true;
-		file_seek(info->file, info->offset);
-		if (flag)
-		{
-			lock_release(&filesys_lock);
-			flag = false;
-		}
+	}
+	file_seek(info->file, info->offset);
+	if (flag)
+	{
+		lock_release(&filesys_lock);
+		flag = false;
 	}
 
 	// merger test lock
@@ -125,21 +125,21 @@ lazy_load_contents(struct page *page, void *aux)
 		lock_acquire(&filesys_lock);
 		flag = true;
 		// 파일에서 페이지를 읽어 메모리에 로드한다.
-		if (file_read(info->file, page->frame->kva, info->read_bytes) != (int)info->read_bytes)
-		{
-			if (flag)
-			{
-				lock_release(&filesys_lock);
-				flag = false;
-			}
-			return false; // 파일 읽기 실패
-		}
-
+	}
+	if (file_read(info->file, page->frame->kva, info->read_bytes) != (int)info->read_bytes)
+	{
 		if (flag)
 		{
 			lock_release(&filesys_lock);
 			flag = false;
 		}
+		return false; // 파일 읽기 실패
+	}
+
+	if (flag)
+	{
+		lock_release(&filesys_lock);
+		flag = false;
 	}
 
 	memset(page->frame->kva + info->read_bytes, 0, info->zero_bytes);
@@ -161,12 +161,12 @@ void *do_mmap(void *addr, size_t length, int writable, struct file *file, off_t 
 	{
 		lock_acquire(&filesys_lock);
 		flag = true;
-		file = file_reopen(file);
-		if (flag)
-		{
-			lock_release(&filesys_lock);
-			flag = false;
-		}
+	}
+	file = file_reopen(file);
+	if (flag)
+	{
+		lock_release(&filesys_lock);
+		flag = false;
 	}
 
 	// 페이지 채우기
@@ -229,13 +229,13 @@ void do_munmap(void *addr)
 					{
 						lock_acquire(&filesys_lock);
 						flag = true;
-						file_write_at(aux->file, check_addr, aux->read_bytes, aux->offset);
+					}
+					file_write_at(aux->file, check_addr, aux->read_bytes, aux->offset);
 
-						if (flag)
-						{
-							lock_release(&filesys_lock);
-							flag = false;
-						}
+					if (flag)
+					{
+						lock_release(&filesys_lock);
+						flag = false;
 					}
 				}
 			}
