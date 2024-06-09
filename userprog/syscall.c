@@ -376,9 +376,22 @@ int open(const char *file)
 	// printf("오픈이 돌아가나?\n");
 
 	check_address(file); // 주어진 파일 이름 주소가 유효한지 확인합니다.
-	// printf("오픈이 오류나나222222?\n");
+						 // printf("오픈이 오류나나222222?\n");
 
-	struct file *f = filesys_open(file); // 파일 시스템에서 파일을 엽니다.
+	struct file *f;
+	// merger test lock
+	bool flag = false;
+	if (!lock_held_by_current_thread(&filesys_lock))
+	{
+		lock_acquire(&filesys_lock);
+		f = filesys_open(file); // 파일 시스템에서 파일을 엽니다.
+		flag = true;
+		if (flag)
+		{
+			lock_release(&filesys_lock);
+			flag = false;
+		}
+	}
 
 	if (!f)
 	{
@@ -389,7 +402,21 @@ int open(const char *file)
 	// return fd;							  // 파일 디스크립터를 반환합니다.
 	int fd = add_file_to_fdt(f);
 	if (fd == -1)
-		file_close(f);
+	{
+		bool flag = false;
+		// merger test lock
+		if (!lock_held_by_current_thread(&filesys_lock))
+		{
+			lock_acquire(&filesys_lock);
+			file_close(f);
+			flag = true;
+			if (flag)
+			{
+				lock_release(&filesys_lock);
+				flag = false;
+			}
+		}
+	}
 	return fd;
 }
 
@@ -514,7 +541,19 @@ void seek(int fd, unsigned position)
 		// {
 		// 	return;
 		// }
-		file_seek(f, position); // 파일의 위치를 지정한 위치로 이동합니다.
+		bool flag = false;
+		// merger test lock
+		if (!lock_held_by_current_thread(&filesys_lock))
+		{
+			lock_acquire(&filesys_lock);
+			file_seek(f, position); // 파일의 위치를 지정한 위치로 이동합니다.
+			flag = true;
+			if (flag)
+			{
+				lock_release(&filesys_lock);
+				flag = false;
+			}
+		}
 	}
 }
 
@@ -534,7 +573,21 @@ unsigned tell(int fd)
 		// {
 		// 	return;
 		// }
-		return file_tell(f); // 파일의 현재 위치를 반환합니다.
+		bool flag = false;
+		// merger test lock
+		if (!lock_held_by_current_thread(&filesys_lock))
+		{
+			lock_acquire(&filesys_lock);
+			flag = true;
+			off_t tell_value = file_tell(f); // 파일의 현재 위치를 반환합니다.
+			if (flag)
+			{
+				lock_release(&filesys_lock);
+				flag = false;
+			}
+
+			return tell_value;
+		}
 	}
 	return -1; // 파일이 열려 있지 않은 경우 -1을 반환합니다.
 }
@@ -554,7 +607,20 @@ void close(int fd)
 	struct file *f = get_file_from_fdt(fd);
 	if (f)
 	{
-		file_close(f); // 파일을 닫습니다.
+		// merger test lock
+		bool flag = false;
+		if (!lock_held_by_current_thread(&filesys_lock))
+		{
+			lock_acquire(&filesys_lock);
+			flag = true;
+			file_close(f); // 파일을 닫습니다.
+
+			if (flag)
+			{
+				lock_release(&filesys_lock);
+			}
+		}
+
 		// thread_current()->fd_table[fd] = NULL; // 파일 디스크립터 테이블에서 파일 포인터를 제거합니다.
 		remove_file_from_fdt(fd);
 	}
@@ -578,16 +644,45 @@ void *mmap(void *addr, size_t length, int writable, int fd, off_t offset)
 		return NULL; /* Ignore stdin and stdout. */
 	}
 
-	/* 파일길이가 0인 경우와 파일이 닫힌 경우 처리*/
-	if (filesize(fd) < 1)
+	bool flag = false;
+	// merger test lock
+	if (!lock_held_by_current_thread(&filesys_lock))
 	{
-		return NULL;
+		lock_acquire(&filesys_lock);
+		flag = true;
+		/* 파일길이가 0인 경우와 파일이 닫힌 경우 처리*/
+		if (filesize(fd) < 1)
+		{
+			if (flag)
+			{
+				lock_release(&filesys_lock);
+				flag = false;
+			}
+			return NULL;
+		}
+		if (flag)
+		{
+			lock_release(&filesys_lock);
+			flag = false;
+		}
 	}
 
-	/* 파일길이를 파일 사이즈로 맞춰줌 */
-	if (length > filesize(fd) - offset)
+	// merger test lock
+	if (!lock_held_by_current_thread(&filesys_lock))
 	{
-		length = filesize(fd) - offset;
+		lock_acquire(&filesys_lock);
+		int fixed_length = filesize(fd) - offset;
+		flag = true;
+
+		if (fixed_length < length)
+		{
+			length = fixed_length;
+		}
+		if (flag)
+		{
+			lock_release(&filesys_lock);
+			flag = false;
+		}
 	}
 
 	void *check_addr = addr;

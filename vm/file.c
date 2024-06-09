@@ -73,8 +73,19 @@ file_backed_destroy(struct page *page)
 		{
 			lazy_load_info *aux = page->file.aux;
 
-			// 파일에 다시 써준다.
-			file_write_at(aux->file, page->start_address, aux->read_bytes, aux->offset);
+			bool flag = false;
+			// merger test lock
+			if (!lock_held_by_current_thread(&filesys_lock))
+			{
+				lock_acquire(&filesys_lock);
+				flag = true;
+				file_write_at(aux->file, page->start_address, aux->read_bytes, aux->offset);
+				if (flag)
+				{
+					lock_release(&filesys_lock);
+					flag = false;
+				}
+			}
 		}
 	}
 
@@ -93,14 +104,44 @@ lazy_load_contents(struct page *page, void *aux)
 	lazy_load_info *info = aux;
 
 	page->is_loaded = true;
-	file_seek(info->file, info->offset);
 
-	// 파일에서 페이지를 읽어 메모리에 로드한다.
-	if (file_read(info->file, page->frame->kva, info->read_bytes) != (int)info->read_bytes)
+	bool flag = false;
+	// merger test lock
+	if (!lock_held_by_current_thread(&filesys_lock))
 	{
-		// printf("lazyload 읽기 실패\n"); // debug
-		return false; // 파일 읽기 실패
+		lock_acquire(&filesys_lock);
+		flag = true;
+		file_seek(info->file, info->offset);
+		if (flag)
+		{
+			lock_release(&filesys_lock);
+			flag = false;
+		}
 	}
+
+	// merger test lock
+	if (!lock_held_by_current_thread(&filesys_lock))
+	{
+		lock_acquire(&filesys_lock);
+		flag = true;
+		// 파일에서 페이지를 읽어 메모리에 로드한다.
+		if (file_read(info->file, page->frame->kva, info->read_bytes) != (int)info->read_bytes)
+		{
+			if (flag)
+			{
+				lock_release(&filesys_lock);
+				flag = false;
+			}
+			return false; // 파일 읽기 실패
+		}
+
+		if (flag)
+		{
+			lock_release(&filesys_lock);
+			flag = false;
+		}
+	}
+
 	memset(page->frame->kva + info->read_bytes, 0, info->zero_bytes);
 
 	// free(info); // unchecked aux malloc free/
@@ -113,6 +154,21 @@ void *do_mmap(void *addr, size_t length, int writable, struct file *file, off_t 
 {
 
 	void *check_addr = addr;
+
+	bool flag = false;
+	// merger test lock
+	if (!lock_held_by_current_thread(&filesys_lock))
+	{
+		lock_acquire(&filesys_lock);
+		flag = true;
+		file = file_reopen(file);
+		if (flag)
+		{
+			lock_release(&filesys_lock);
+			flag = false;
+		}
+	}
+
 	// 페이지 채우기
 	while (length > 0)
 	{
@@ -123,7 +179,7 @@ void *do_mmap(void *addr, size_t length, int writable, struct file *file, off_t 
 		void *aux = NULL;
 		lazy_load_info *aux_info = malloc(sizeof(struct lazy_load_info_t));
 
-		aux_info->file = file_reopen(file); // 매핑된 파일 살리기 위해 구조체 재설정해줌.
+		aux_info->file = file; // 매핑된 파일 살리기 위해 구조체 재설정해줌.
 		aux_info->offset = offset;
 		aux_info->read_bytes = page_read_bytes;
 		aux_info->zero_bytes = page_zero_bytes;
@@ -165,11 +221,22 @@ void do_munmap(void *addr)
 				// 페이지가 dirty (true)하면 = 쓰기를 했으면
 				if (pml4_is_dirty(thread_current()->pml4, check_addr))
 				{
-					// printf("파일 다시쓰기 성공?????????????????????\n");
-
-					// 파일에 다시 써준다.
 					lazy_load_info *aux = page->file.aux;
-					file_write_at(aux->file, check_addr, aux->read_bytes, aux->offset);
+
+					bool flag = false;
+					// merger test lock
+					if (!lock_held_by_current_thread(&filesys_lock))
+					{
+						lock_acquire(&filesys_lock);
+						flag = true;
+						file_write_at(aux->file, check_addr, aux->read_bytes, aux->offset);
+
+						if (flag)
+						{
+							lock_release(&filesys_lock);
+							flag = false;
+						}
+					}
 				}
 			}
 

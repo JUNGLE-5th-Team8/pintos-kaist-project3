@@ -928,14 +928,44 @@ lazy_load_segment(struct page *page, void *aux)
 	lazy_load_info *info = aux;
 
 	page->is_loaded = true;
-	file_seek(info->file, info->offset);
+	bool flag = false;
+	// merger test lock
+	if (!lock_held_by_current_thread(&filesys_lock))
+	{
+		lock_acquire(&filesys_lock);
+		file_seek(info->file, info->offset);
+		flag = true;
+		if (flag)
+		{
+			lock_release(&filesys_lock);
+			flag = false;
+		}
+	}
+
+	// merger test lock
+	if (!lock_held_by_current_thread(&filesys_lock))
+	{
+		flag = true;
+		lock_acquire(&filesys_lock);
+	}
 
 	// 파일에서 페이지를 읽어 메모리에 로드한다.
 	if (file_read(info->file, page->frame->kva, info->read_bytes) != (int)info->read_bytes)
 	{
+		if (flag)
+		{
+			lock_release(&filesys_lock);
+			flag = false;
+		}
 		// printf("lazyload 읽기 실패\n"); // debug
 		return false; // 파일 읽기 실패
 	}
+	if (flag)
+	{
+		lock_release(&filesys_lock);
+		flag = false;
+	}
+
 	memset(page->frame->kva + info->read_bytes, 0, info->zero_bytes);
 
 	// free(info); // unchecked aux malloc free/

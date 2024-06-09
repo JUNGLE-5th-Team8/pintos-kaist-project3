@@ -415,10 +415,6 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 static void hash_action_clear(struct hash_elem *e, void *aux)
 {
 	struct page *page = hash_entry(e, struct page, hash_elem);
-	// if (page->start_address != NULL)
-	// {
-	// 	do_munmap(page->start_address); // 프로세스 종료하기전에 unmap 진행
-	// }
 
 	if (page->frame)
 	{
