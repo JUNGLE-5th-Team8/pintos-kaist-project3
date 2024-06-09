@@ -505,7 +505,7 @@ void seek(int fd, unsigned position)
 		// if (f <= 2) // 0,1,2는 이미 정의되어 있음
 		// {
 		// 	return;
-		// }
+		// }//
 		file_seek(f, position); // 파일의 위치를 지정한 위치로 이동합니다.
 	}
 }
