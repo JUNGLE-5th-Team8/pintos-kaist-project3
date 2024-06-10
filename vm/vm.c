@@ -412,11 +412,21 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 		{ // init메모리가 아니라면....
 			vm_alloc_page_with_initializer(page_to_copy->anon.type, page_to_copy->va,
 										   page_to_copy->writable, child_copy_pm, page_to_copy->frame->kva); // NULL에 메모리 로드하는 함수 만들기
-																											 // 부모에서 미리 메모리에 할당되있던 곳들은 claim
+
+			bool flag = false;
 			// merger test lock
-			lock_acquire(&filesys_lock);
+			if (!lock_held_by_current_thread(&filesys_lock))
+			{
+				lock_acquire(&filesys_lock);
+				flag = true;
+			}
+			// 부모에서 미리 메모리에 할당되있던 곳들은 claim
 			vm_claim_page(page_to_copy->va);
-			lock_release(&filesys_lock);
+			if (flag)
+			{
+				flag = false;
+				lock_release(&filesys_lock);
+			}
 		}
 		// 로드가 안 된 경우
 		else
