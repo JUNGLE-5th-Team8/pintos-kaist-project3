@@ -284,14 +284,25 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 		return false;
 	}
 
+	bool flag = false;
+	if (!lock_held_by_current_thread(&filesys_lock))
+	{
+		flag = true;
+		lock_acquire(&filesys_lock);
+	}
+
 	if (vm_do_claim_page(page))
 	{
 		// printf("vm_do_claim 성공\n"); /* Debug */
+		if (flag)
+			lock_release(&filesys_lock);
 		return true;
 	}
 	else
 	{
 		// printf("do_claim 실패\n"); /* Debug */
+		if (flag)
+			lock_release(&filesys_lock);
 		return false;
 	}
 }
@@ -383,9 +394,7 @@ bool copy_child(struct page *child, void *aux)
 {
 	// struct page *parent = aux;
 
-	lock_acquire(&filesys_lock);
 	memcpy(child->frame->kva, aux, PGSIZE);
-	lock_release(&filesys_lock);
 	return true;
 }
 
@@ -393,6 +402,13 @@ bool copy_child(struct page *child, void *aux)
 bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 								  struct supplemental_page_table *src UNUSED)
 {
+	bool flag = false;
+	if (!lock_held_by_current_thread(&filesys_lock))
+	{
+		flag = true;
+		lock_acquire(&filesys_lock);
+	}
+
 	/* 해시 이터레이터 생성 */
 	struct hash_iterator hi;
 	hash_first(&hi, &src->hash_table);
@@ -427,6 +443,9 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 										   old_page->uninit.init, aux);
 		}
 	}
+
+	if (flag)
+		lock_release(&filesys_lock);
 	return true;
 }
 
@@ -448,5 +467,15 @@ void supplemental_page_table_kill(struct supplemental_page_table *spt UNUSED)
 	/* TODO: Destroy all the supplemental_page_table hold by thread and
 	 * TODO: writeback all the modified contents to the storage. */
 
+	// merge test
+	bool flag = false;
+	if (!lock_held_by_current_thread(&filesys_lock))
+	{
+		flag = true;
+		lock_acquire(&filesys_lock);
+	}
 	hash_clear(&spt->hash_table, hash_action_clear);
+	if (flag)
+		lock_release(&filesys_lock);
+	return true;
 }

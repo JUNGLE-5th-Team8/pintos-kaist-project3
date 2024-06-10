@@ -69,16 +69,7 @@ file_backed_destroy(struct page *page)
 	if (page->frame != NULL && pml4_is_dirty(thread_current()->pml4, page->va))
 	{
 		struct auxillary *auxi = file_page->aux;
-
-		// lock_acquire(&filesys_lock);
-		// file_seek(auxi->file, auxi->ofs);
-		if (file_tell(auxi->file) == auxi->ofs)
-		{
-			// printf("포지션 같음\n\n");
-		}
 		off_t write_cnt = file_write_at(auxi->file, page->va, auxi->prb, auxi->ofs);
-		// off_t write_cnt = file_write(auxi->file, page->va, auxi->prb);
-		// lock_release(&filesys_lock);
 	}
 	// file_close(((struct auxillary *)(file_page->aux))->file);
 	free(file_page->aux);
@@ -131,9 +122,7 @@ void *do_mmap(void *addr, size_t length, int writable,
 	size_t read_bytes = length;
 	void *address = addr;
 
-	// lock_acquire(&filesys_lock);
 	struct file *reopen_file = file_reopen(file);
-	// lock_release(&filesys_lock);
 	while (read_bytes > 0)
 	{
 		// printf("do_mmap ||| addr : %p\n", address);
@@ -209,7 +198,6 @@ void do_munmap(void *addr)
 	struct page *page;
 	void *s_addr = page->start_address;
 
-	// lock_acquire(&filesys_lock);
 	while (page = spt_find_page(&thread_current()->spt, addr))
 	{
 
@@ -230,5 +218,4 @@ void do_munmap(void *addr)
 		spt_remove_page(&thread_current()->spt, page);
 		addr += PGSIZE;
 	}
-	// lock_release(&filesys_lock);
 }

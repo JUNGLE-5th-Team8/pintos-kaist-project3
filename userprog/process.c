@@ -328,7 +328,9 @@ int process_exec(void *f_name)
 	/* And then load the binary */ /* 바이너리를 로드합니다. */
 	// success = load(file_name, &_if);
 	/* 실행 파일 이름을 load 함수의 첫 번째 인자로 전달합니다. */
+	lock_acquire(&filesys_lock);
 	success = load(argv[0], &_if);
+	lock_release(&filesys_lock);
 
 	/* If load failed, quit. */ /* 로드에 실패하면 종료합니다. */
 	if (!success)

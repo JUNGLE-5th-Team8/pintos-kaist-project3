@@ -149,10 +149,14 @@ void syscall_handler(struct intr_frame *f UNUSED)
 	// 	dup2((int)f->R.rdi, (int)f->R.rsi);
 	// 	break;
 	case SYS_MMAP:
+		lock_acquire(&filesys_lock);
 		f->R.rax = mmap((void *)f->R.rdi, (size_t)f->R.rsi, (int)f->R.rdx, (int)f->R.r10, (off_t)f->R.r8);
+		lock_release(&filesys_lock);
 		break;
 	case SYS_MUNMAP:
+		lock_acquire(&filesys_lock);
 		munmap((void *)f->R.rdi);
+		lock_release(&filesys_lock);
 		break;
 	default:
 		// 지원되지 않는 시스템 콜 처리
@@ -340,7 +344,10 @@ bool create(const char *file, unsigned initial_size)
 	/* 파일 생성 성공 시 true 반환, 실패 시 false 반환 */
 	check_address((void *)file);
 	// 실제 파일 시스템 호출로 변경 필요
-	return filesys_create(file, initial_size);
+	lock_acquire(&filesys_lock);
+	bool succ = filesys_create(file, initial_size);
+	lock_release(&filesys_lock);
+	return succ;
 }
 
 /**
@@ -360,7 +367,10 @@ bool remove(const char *file)
 	/* 파일 제거 성공 시 true 반환, 실패 시 false 반환 */
 	check_address((void *)file);
 	// 실제 파일 시스템 호출로 변경 필요
-	return filesys_remove(file);
+	lock_acquire(&filesys_lock);
+	bool succ = filesys_remove(file);
+	lock_release(&filesys_lock);
+	return succ;
 }
 
 /**
@@ -371,8 +381,10 @@ bool remove(const char *file)
  */
 int open(const char *file)
 {
-	check_address(file);				 // 주어진 파일 이름 주소가 유효한지 확인합니다.
+	check_address(file); // 주어진 파일 이름 주소가 유효한지 확인합니다.
+	lock_acquire(&filesys_lock);
 	struct file *f = filesys_open(file); // 파일 시스템에서 파일을 엽니다.
+	lock_release(&filesys_lock);
 	if (!f)
 	{
 		return -1; // 파일을 열 수 없는 경우 -1을 반환합니다.
@@ -506,7 +518,9 @@ void seek(int fd, unsigned position)
 		// {
 		// 	return;
 		// }//
+		lock_acquire(&filesys_lock);
 		file_seek(f, position); // 파일의 위치를 지정한 위치로 이동합니다.
+		lock_release(&filesys_lock);
 	}
 }
 
@@ -526,7 +540,9 @@ unsigned tell(int fd)
 		// {
 		// 	return;
 		// }
+		lock_acquire(&filesys_lock);
 		return file_tell(f); // 파일의 현재 위치를 반환합니다.
+		lock_release(&filesys_lock);
 	}
 	return -1; // 파일이 열려 있지 않은 경우 -1을 반환합니다.
 }
@@ -546,7 +562,9 @@ void close(int fd)
 	struct file *f = get_file_from_fdt(fd);
 	if (f)
 	{
+		lock_acquire(&filesys_lock);
 		file_close(f); // 파일을 닫습니다.
+		lock_release(&filesys_lock);
 		// thread_current()->fd_table[fd] = NULL; // 파일 디스크립터 테이블에서 파일 포인터를 제거합니다.
 		remove_file_from_fdt(fd);
 	}
@@ -624,6 +642,7 @@ void *mmap(void *addr, size_t length, int writable, int fd, off_t offset)
 	}
 
 	/* fd로 열린 파일의 길이가 0바이트 인 경우 실패(파일이 안열려 있으면 -1) */
+
 	int file_len = filesize(fd);
 	if (file_len < 1 || file_len <= offset)
 	{
