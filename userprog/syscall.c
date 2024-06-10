@@ -352,9 +352,9 @@ bool create(const char *file, unsigned initial_size)
 	bool result = filesys_create(file, initial_size);
 	if (flag)
 	{
-		lock_release(&filesys_lock);
 		flag = false;
 	}
+	lock_release(&filesys_lock);
 
 	return result;
 }
@@ -386,9 +386,9 @@ bool remove(const char *file)
 	bool result = filesys_remove(file);
 	if (flag)
 	{
-		lock_release(&filesys_lock);
 		flag = false;
 	}
+	lock_release(&filesys_lock);
 
 	// 실제 파일 시스템 호출로 변경 필요
 	return result;
@@ -418,9 +418,9 @@ int open(const char *file)
 	f = filesys_open(file); // 파일 시스템에서 파일을 엽니다.
 	if (flag)
 	{
-		lock_release(&filesys_lock);
 		flag = false;
 	}
+	lock_release(&filesys_lock);
 
 	if (!f)
 	{
@@ -442,9 +442,9 @@ int open(const char *file)
 		file_close(f);
 		if (flag)
 		{
-			lock_release(&filesys_lock);
 			flag = false;
 		}
+		lock_release(&filesys_lock);
 	}
 	return fd;
 }
@@ -474,9 +474,9 @@ int filesize(int fd)
 	off_t result = file_length(f);
 	if (flag)
 	{
-		lock_release(&filesys_lock);
 		flag = false;
 	}
+	lock_release(&filesys_lock);
 
 	return result; // 파일의 길이를 반환합니다.
 }
@@ -537,9 +537,9 @@ int read(int fd, void *buffer, unsigned size)
 
 		if (flag)
 		{
-			lock_release(&filesys_lock);
 			flag = false;
 		}
+		lock_release(&filesys_lock);
 	}
 	return read_byte; // 파일에서 데이터를 읽고, 읽은 바이트 수를 반환합니다.
 }
@@ -585,9 +585,9 @@ int write(int fd, const void *buffer, unsigned size)
 		write_byte = file_write(f, buffer, size);
 		if (flag)
 		{
-			lock_release(&filesys_lock);
 			flag = false;
 		}
+		lock_release(&filesys_lock);
 	}
 	return write_byte; // 파일에 데이터를 쓰고, 쓴 바이트 수를 반환합니다.
 }
@@ -618,9 +618,9 @@ void seek(int fd, unsigned position)
 		file_seek(f, position); // 파일의 위치를 지정한 위치로 이동합니다.
 		if (flag)
 		{
-			lock_release(&filesys_lock);
 			flag = false;
 		}
+		lock_release(&filesys_lock);
 	}
 }
 
@@ -650,9 +650,9 @@ unsigned tell(int fd)
 		off_t tell_value = file_tell(f); // 파일의 현재 위치를 반환합니다.
 		if (flag)
 		{
-			lock_release(&filesys_lock);
 			flag = false;
 		}
+		lock_release(&filesys_lock);
 
 		return tell_value;
 	}
@@ -685,9 +685,9 @@ void close(int fd)
 
 		if (flag)
 		{
-			lock_release(&filesys_lock);
 			flag = false;
 		}
+		lock_release(&filesys_lock);
 
 		// thread_current()->fd_table[fd] = NULL; // 파일 디스크립터 테이블에서 파일 포인터를 제거합니다.
 		remove_file_from_fdt(fd);
@@ -724,16 +724,16 @@ void *mmap(void *addr, size_t length, int writable, int fd, off_t offset)
 	{
 		if (flag)
 		{
-			lock_release(&filesys_lock);
 			flag = false;
 		}
+		lock_release(&filesys_lock);
 		return NULL;
 	}
 	if (flag)
 	{
-		lock_release(&filesys_lock);
 		flag = false;
 	}
+	lock_release(&filesys_lock);
 
 	// merger test lock
 	if (!lock_held_by_current_thread(&filesys_lock))
@@ -749,9 +749,9 @@ void *mmap(void *addr, size_t length, int writable, int fd, off_t offset)
 	}
 	if (flag)
 	{
-		lock_release(&filesys_lock);
 		flag = false;
 	}
+	lock_release(&filesys_lock);
 
 	void *check_addr = addr;
 	/* 중복된 페이지가 있는지 검사 -> while문으로 확인*/
