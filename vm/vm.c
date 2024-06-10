@@ -283,13 +283,31 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 		return false;
 	}
 
+	bool flag = false;
+	// merger test lock
+	if (!lock_held_by_current_thread(&filesys_lock))
+	{
+		lock_acquire(&filesys_lock);
+		flag = true;
+	}
+
 	if (vm_do_claim_page(page))
 	{
+		if (flag)
+		{
+			lock_release(&filesys_lock);
+			flag = false;
+		}
 		// printf("do claim 성공\n"); //debug
 		return true;
 	}
 	else
 	{
+		if (flag)
+		{
+			lock_release(&filesys_lock);
+			flag = false;
+		}
 		// printf("do claim 실패\n"); //debug
 		return false;
 	}
@@ -394,8 +412,11 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 		{ // init메모리가 아니라면....
 			vm_alloc_page_with_initializer(page_to_copy->anon.type, page_to_copy->va,
 										   page_to_copy->writable, child_copy_pm, page_to_copy->frame->kva); // NULL에 메모리 로드하는 함수 만들기
-			// 부모에서 미리 메모리에 할당되있던 곳들은 claim
+																											 // 부모에서 미리 메모리에 할당되있던 곳들은 claim
+			// merger test lock
+			lock_acquire(&filesys_lock);
 			vm_claim_page(page_to_copy->va);
+			lock_release(&filesys_lock);
 		}
 		// 로드가 안 된 경우
 		else
@@ -430,7 +451,18 @@ void supplemental_page_table_kill(struct supplemental_page_table *spt UNUSED)
 {
 	/* TODO: Destroy all the supplemental_page_table hold by thread and
 	 * TODO: writeback all the modified contents to the storage. */
-	// printf("프로세스킬!!!!!!!!!!!\n");
 
+	bool flag = false;
+	// merger test lock
+	if (!lock_held_by_current_thread(&filesys_lock))
+	{
+		lock_acquire(&filesys_lock);
+		flag = true;
+	}
 	hash_clear(&spt->hash_table, hash_action_clear);
+	if (flag)
+	{
+		lock_release(&filesys_lock);
+		flag = false;
+	}
 }

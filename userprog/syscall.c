@@ -145,12 +145,17 @@ void syscall_handler(struct intr_frame *f UNUSED)
 		// 3번째 인자: %rdx
 		// 4번째 인자: %r10
 		// 5번째 인자: %r8
+		// merger test lock
+		lock_acquire(&filesys_lock);
 		f->R.rax = mmap((void *)f->R.rdi, (size_t)f->R.rsi, (int)f->R.rdx, (int)f->R.r10, (off_t)f->R.r8);
+		lock_release(&filesys_lock);
 		break;
 	case SYS_MUNMAP:
 		// void munmap(void *addr);
-
+		// merger test lock
+		lock_acquire(&filesys_lock);
 		munmap((void *)f->R.rdi);
+		lock_release(&filesys_lock);
 		break;
 
 	// case SYS_DUP2: /* 구현 실패... */
