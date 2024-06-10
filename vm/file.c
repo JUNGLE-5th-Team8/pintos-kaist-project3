@@ -84,8 +84,8 @@ file_backed_destroy(struct page *page)
 			if (flag)
 			{
 				flag = false;
+				lock_release(&filesys_lock);
 			}
-			lock_release(&filesys_lock);
 		}
 	}
 
@@ -116,8 +116,8 @@ lazy_load_contents(struct page *page, void *aux)
 	if (flag)
 	{
 		flag = false;
+		lock_release(&filesys_lock);
 	}
-	lock_release(&filesys_lock);
 
 	// merger test lock
 	if (!lock_held_by_current_thread(&filesys_lock))
@@ -131,16 +131,16 @@ lazy_load_contents(struct page *page, void *aux)
 		if (flag)
 		{
 			flag = false;
+			lock_release(&filesys_lock);
 		}
-		lock_release(&filesys_lock);
 		return false; // 파일 읽기 실패
 	}
 
 	if (flag)
 	{
 		flag = false;
+		lock_release(&filesys_lock);
 	}
-	lock_release(&filesys_lock);
 
 	memset(page->frame->kva + info->read_bytes, 0, info->zero_bytes);
 
@@ -166,8 +166,8 @@ void *do_mmap(void *addr, size_t length, int writable, struct file *file, off_t 
 	if (flag)
 	{
 		flag = false;
+		lock_release(&filesys_lock);
 	}
-	lock_release(&filesys_lock);
 
 	// 페이지 채우기
 	while (length > 0)
@@ -235,8 +235,8 @@ void do_munmap(void *addr)
 					if (flag)
 					{
 						flag = false;
+						lock_release(&filesys_lock);
 					}
-					lock_release(&filesys_lock);
 				}
 			}
 
