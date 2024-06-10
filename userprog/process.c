@@ -941,9 +941,9 @@ lazy_load_segment(struct page *page, void *aux)
 	file_seek(info->file, info->offset);
 	if (flag)
 	{
-		lock_release(&filesys_lock);
 		flag = false;
 	}
+	lock_release(&filesys_lock);
 
 	// merger test lock
 	if (!lock_held_by_current_thread(&filesys_lock))
@@ -957,17 +957,18 @@ lazy_load_segment(struct page *page, void *aux)
 	{
 		if (flag)
 		{
-			lock_release(&filesys_lock);
 			flag = false;
 		}
+		lock_release(&filesys_lock);
+
 		// printf("lazyload 읽기 실패\n"); // debug
 		return false; // 파일 읽기 실패
 	}
 	if (flag)
 	{
-		lock_release(&filesys_lock);
 		flag = false;
 	}
+	lock_release(&filesys_lock);
 
 	memset(page->frame->kva + info->read_bytes, 0, info->zero_bytes);
 
