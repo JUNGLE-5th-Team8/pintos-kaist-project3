@@ -9,6 +9,7 @@
 
 #ifdef VM
 #include "vm/vm.h"
+#include "devices/disk.h"
 #endif
 
 /* States in a thread's life cycle. */

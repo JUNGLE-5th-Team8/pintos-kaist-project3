@@ -3,6 +3,10 @@
 #include <stdbool.h>
 #include "threads/palloc.h"
 #include "include/lib/kernel/hash.h"
+#include "devices/disk.h"
+
+// frame table : 원형 리스트
+static struct list frame_table;
 
 enum vm_type
 {
@@ -55,11 +59,13 @@ struct page
 
 	/* Your implementation */
 	/*------- project3 추가 -------------------------------------*/
-	bool writable;				// true일경우 해당 주소에 write 가능
-	bool is_loaded;				// 물리메모리의 탑재 여부를 알려주는 플래그
-	enum vm_type is_stack;		// 스택 페이지 확인 플래그
-	struct hash_elem hash_elem; // 해시테이블 element
-	void *start_address;		// mmap 시작주소 저장용
+	bool writable;				 // true일경우 해당 주소에 write 가능
+	bool is_loaded;				 // 물리메모리의 탑재 여부를 알려주는 플래그
+	void *start_address;		 // mmap 시작주소 저장용
+	struct hash_elem hash_elem;	 // 해시테이블 element
+	struct list_elem frame_elem; // 프레임테이블 element
+	struct thread *thread;		 // 해당 물리 페이지를 사용중인 스레드 포인터
+	disk_sector_t sw_idx;		 // 스왑슬롯 인덱스 변수
 
 	/*--------------------------------------------------------------*/
 
@@ -81,6 +87,13 @@ struct frame
 {
 	void *kva;		   // 커널 가상 주소
 	struct page *page; // 페이지 구조체를 담기 위한 멤버
+
+	/* ------------ project3 vm 멤버 추가----------------*/
+
+	// struct thread *thread;		// 해당 물리 페이지를 사용중인 스레드 포인터
+	// struct list_elem fram_elem; // list 연결을 위한 필드
+
+	/*---------------------------------------------------*/
 };
 
 /* The function table for page operations.
