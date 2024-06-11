@@ -48,6 +48,53 @@ static bool
 file_backed_swap_in(struct page *page, void *kva)
 {
 	struct file_page *file_page UNUSED = &page->file;
+
+	lazy_load_info *info = file_page->aux;
+	page->is_loaded = true;
+	page->frame->kva = kva;
+	// printf("file swap in 되나?\n");
+
+	bool flag = false;
+	// merger test lock
+	if (!lock_held_by_current_thread(&filesys_lock))
+	{
+		lock_acquire(&filesys_lock);
+		flag = true;
+	}
+	file_seek(info->file, info->offset);
+	if (flag)
+	{
+		flag = false;
+		lock_release(&filesys_lock);
+	}
+
+	// merger test lock
+	if (!lock_held_by_current_thread(&filesys_lock))
+	{
+		lock_acquire(&filesys_lock);
+		flag = true;
+		// 파일에서 페이지를 읽어 메모리에 로드한다.
+	}
+	if (file_read(info->file, page->frame->kva, info->read_bytes) != (int)info->read_bytes)
+	{
+		if (flag)
+		{
+			flag = false;
+			lock_release(&filesys_lock);
+		}
+		return false; // 파일 읽기 실패
+	}
+
+	if (flag)
+	{
+		flag = false;
+		lock_release(&filesys_lock);
+	}
+
+	memset(page->frame->kva + info->read_bytes, 0, info->zero_bytes);
+
+	pml4_set_page(thread_current()->pml4, page->va, page->frame->kva, page->writable);
+	return true;
 }
 
 /* Swap out the page by writeback contents to the file. */
@@ -55,6 +102,36 @@ static bool
 file_backed_swap_out(struct page *page)
 {
 	struct file_page *file_page UNUSED = &page->file;
+	// printf("file swap out 되나?\n");
+
+	// 페이지가 dirty (true)하면 = 쓰기를 했으면
+	if (pml4_is_dirty(thread_current()->pml4, page->va))
+	{
+		// printf("file swap out 되나?\n");
+		lazy_load_info *aux = page->file.aux;
+
+		bool flag = false;
+		// merger test lock
+		if (!lock_held_by_current_thread(&filesys_lock))
+		{
+			lock_acquire(&filesys_lock);
+			flag = true;
+		}
+		file_write_at(aux->file, page->va, aux->read_bytes, aux->offset);
+		if (flag)
+		{
+			flag = false;
+			lock_release(&filesys_lock);
+		}
+		// 페이지 교체후 페이지의 더티 비트 끄기
+		pml4_set_dirty(thread_current()->pml4, page->va, false);
+	}
+
+	// printf("file swap out 되나?\n");
+	list_remove(&page->frame_elem);
+	page->is_loaded = false;
+	pml4_clear_page(thread_current()->pml4, page->va);
+	return true;
 }
 
 /* Destory the file backed page. PAGE will be freed by the caller. */

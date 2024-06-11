@@ -192,11 +192,12 @@ vm_get_victim(void)
 	while (1)
 	{
 
+		// printf("가나라다\n");
 		if (page_elem == list_end(&frame_table))
 		{
+			// printf("야발\n");
 			page_elem = list_begin(&frame_table);
 			// printf("%p!!!!!\n", page_elem);
-			// printf("야발\n");
 		}
 		page = list_entry(page_elem, struct page, frame_elem);
 
@@ -208,17 +209,16 @@ vm_get_victim(void)
 		// 	continue;
 		// }
 
-		if (!pml4_is_accessed(page->thread->pml4, page->va))
+		if (!pml4_is_accessed(thread_current()->pml4, page->va))
 		{
-			// printf("%p!!!!!\n", page_elem);
-
 			victim = page->frame;
 			break;
 		}
-		pml4_set_accessed(page->thread->pml4, page->va, false);
+
+		pml4_set_accessed(thread_current()->pml4, page->va, false);
 		page_elem = list_next(page_elem);
 	}
-	// printf("%p\!!!!!!!!\n",victim->page->va);
+	// printf("vm get victim %p\n!!!!!!!!\n", victim->page->va);
 
 	return victim;
 }
@@ -275,6 +275,7 @@ vm_get_frame(void)
 			// PANIC("swap out 실패!!!!!\n");
 			return NULL;
 		}
+		// printf("vm_get_frame 실행\n");
 		paddr = frame->kva;
 		// printf("paddr: %p\n", paddr); // debug
 	}
