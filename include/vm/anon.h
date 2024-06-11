@@ -1,6 +1,7 @@
 #ifndef VM_ANON_H
 #define VM_ANON_H
 #include "vm/vm.h"
+#include "kernel/bitmap.h"
 struct page;
 enum vm_type;
 
@@ -12,6 +13,11 @@ struct anon_page
     void *aux;
     /* Initiate the struct page and maps the pa to the va */
     bool (*page_initializer)(struct page *, enum vm_type, void *kva);
+    disk_sector_t st_idx;
+};
+
+struct swap_table{
+    struct bitmap* sb; 
 };
 
 void vm_anon_init(void);

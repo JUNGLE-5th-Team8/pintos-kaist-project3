@@ -3,6 +3,8 @@
 #include <stdbool.h>
 #include "threads/palloc.h"
 #include "include/lib/kernel/hash.h"
+#include "devices/disk.h"
+#include "kernel/list.h"
 
 enum vm_type
 {
@@ -60,6 +62,8 @@ struct page
 	enum vm_type is_stack;		// 스택 페이지 확인 플래그
 	struct hash_elem hash_elem; // 해시테이블 element
 	void *start_address;		// mmap 시작주소 저장용
+	struct thread* thread;
+	struct list_elem ft_elem;
 
 	/*--------------------------------------------------------------*/
 
@@ -130,5 +134,7 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage,
 void vm_dealloc_page(struct page *page);
 bool vm_claim_page(void *va);
 enum vm_type page_get_type(struct page *page);
+
+struct list ft;
 
 #endif /* VM_VM_H */

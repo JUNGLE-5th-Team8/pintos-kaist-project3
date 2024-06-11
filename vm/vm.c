@@ -14,6 +14,7 @@
  * intialize codes. */
 void vm_init(void)
 {
+	list_init(&ft);
 	vm_anon_init();
 	vm_file_init();
 #ifdef EFILESYS /* For project 4 */
@@ -169,12 +170,40 @@ void spt_remove_page(struct supplemental_page_table *spt, struct page *page)
 	// return true;
 }
 
+// for (e = list_begin (&list); e != list_end (&list); e = list_next (e))
+//  {
+//  ...do something with e...
+//  list_remove (e);
+//  }
+
 /* Get the struct frame, that will be evicted. */
 static struct frame *
 vm_get_victim(void)
 {
 	struct frame *victim = NULL;
 	/* TODO: The policy for eviction is up to you. */
+	if(list_empty(&ft)){
+		printf("없네\n");
+		return NULL;
+	}
+	struct list_elem* page_elem = list_begin(&ft);
+	// printf("%p!!!!\n");
+	struct page* page = NULL;
+	while(1){
+		if(page_elem == list_end(&ft)){
+			page_elem = list_begin(&ft);
+			// printf("%p!!!!!\n",page_elem);
+			// printf("야발\n");
+		}
+		page = list_entry(page_elem,struct page,ft_elem);
+		if(!pml4_is_accessed(page->thread->pml4,page->va)){
+			victim = page->frame;
+			break;
+		}
+		pml4_set_accessed(page->thread->pml4,page->va,false);
+		page_elem = list_next(page_elem);
+	}
+	// printf("%p\!!!!!!!!\n",victim->page->va);
 
 	return victim;
 }
@@ -186,8 +215,14 @@ vm_evict_frame(void)
 {
 	struct frame *victim UNUSED = vm_get_victim();
 	/* TODO: swap out the victim and return the evicted frame. */
-
-	return NULL;
+	if(victim==NULL){
+		return NULL;
+	}
+	if(!swap_out(victim->page)){
+		// prinf("야발\n");
+		return NULL;
+	}
+	return victim;
 }
 
 /* palloc() and get frame. If there is no available page, evict the page
@@ -201,15 +236,20 @@ vm_get_frame(void)
 	/* TODO: Fill this function. */
 
 	void *paddr = palloc_get_page(PAL_USER | PAL_ZERO);
-
 	// 메모리가 꽉찼을 경우 swap out을 처리해줘야하지만 일단 panic(todo)로 케이스만 표시하고 넘어감.
 	if (paddr == NULL)
 	{
-		PANIC("todo");
+		// PANIC("todo");
+		if(!(frame = vm_evict_frame())){
+			PANIC("tq");
+		}
+		// list_remove(&frame->page->ft_elem);
+
+		paddr = palloc_get_page(PAL_USER | PAL_ZERO);
 	}
 
 	frame = malloc(sizeof(struct frame)); // 프레임 할당
-	frame->kva = paddr;					  // 프레임 구조체 초기화
+	frame->kva = paddr;					 // 프레임 구조체 초기화
 	frame->page = NULL;
 
 	ASSERT(frame != NULL);
@@ -257,11 +297,9 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 		// printf("유효하지 않은 주소 접근 찐 page fault!\n"); // debug
 		return false; // 주소가 유저 공간이 아니면 실패
 	}
-
 	page = spt_find_page(spt, addr);
 	if (page == NULL)
 	{
-
 		void *rsp = f->rsp; // 스택 포인터
 		// 커널 모드일때 스택 포인터 위치 확인
 		// if (!user)
@@ -350,8 +388,10 @@ vm_do_claim_page(struct page *page)
 
 	/* TODO: Insert page table entry to map page's VA to frame's PA. */
 	// MMU 세팅: 가상 주소와 물리 주소를 매핑한 정보를 페이지 테이블에 추가해야한다.
+	page->thread = thread_current();
 
 	pml4_set_page(thread_current()->pml4, page->va, frame->kva, page->writable);
+	list_push_front(&ft,&page->ft_elem);
 
 	return swap_in(page, frame->kva);
 }
