@@ -29,6 +29,7 @@ enum vm_type
 #include "vm/uninit.h"
 #include "vm/anon.h"
 #include "vm/file.h"
+#include "devices/disk.h"
 #ifdef EFILESYS
 #include "filesys/page_cache.h"
 #endif
@@ -54,7 +55,9 @@ struct page
 	bool is_loaded; // 물리메모리의 탑재 여부를 알려주는 플래그
 	void *start_address;
 	struct hash_elem hash_elem; // 해시테이블 element
-
+	struct list_elem frame_elem;
+	struct thread *thread;
+	disk_sector_t swap_idx;
 	/*--------------------------------------------------------------*/
 
 	/* Per-type data are binded into the union.
@@ -76,6 +79,15 @@ struct frame
 	void *kva;		   // 커널 가상 주소
 	struct page *page; // 페이지 구조체를 담기 위한 멤버
 };
+
+struct frame_table
+{
+	struct list frame_list;
+	struct list_elem *frame_clock;
+};
+
+/* 프레임 테이블 */
+struct frame_table ft;
 
 /* The function table for page operations.
  * This is one way of implementing "interface" in C.

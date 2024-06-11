@@ -15,6 +15,10 @@ void vm_init(void)
 {
 	vm_anon_init();
 	vm_file_init();
+
+	/* 프레임 테이블 초기화 */
+	list_init(&ft.frame_list);
+	ft.frame_clock = NULL;
 #ifdef EFILESYS /* For project 4 */
 	pagecache_init();
 #endif
@@ -85,6 +89,7 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
 		// printf("uninit page 구조체 생성 : %p\n", upage); /* Debug */
 		new_page->writable = writable;
 		new_page->is_loaded = false;
+		new_page->thread = thread_current();
 
 		/* Insert the page into the spt. */
 		if (spt_insert_page(spt, new_page))
@@ -162,6 +167,36 @@ vm_get_victim(void)
 {
 	struct frame *victim = NULL;
 	/* TODO: The policy for eviction is up to you. */
+	if (list_empty(&ft.frame_list))
+		return NULL;
+
+	// struct list_elem *page_elem = list_begin(&ft.frame_list);
+	struct list_elem *page_elem = ft.frame_clock;
+	if (page_elem == NULL)
+		page_elem = list_begin(&ft.frame_list);
+
+	while (page_elem != NULL)
+	{
+		struct page *page = list_entry(page_elem, struct page, frame_elem);
+
+		if (!pml4_is_accessed(page->thread->pml4, page->va))
+		{
+			// printf("page->va : %p, kva : %p\n", page->va, page->frame->kva);
+			victim = page->frame;
+			ft.frame_clock = list_next(page_elem);
+			break;
+		}
+
+		/* pml4에서 accessed false로 변경 */
+		pml4_set_accessed(page->thread->pml4, page->va, false);
+
+		/* 다음 elem으로 이동 */
+		page_elem = list_next(page_elem);
+		if (page_elem == list_tail(&ft.frame_list))
+		{
+			page_elem = list_begin(&ft.frame_list);
+		}
+	}
 
 	return victim;
 }
@@ -173,8 +208,10 @@ vm_evict_frame(void)
 {
 	struct frame *victim UNUSED = vm_get_victim();
 	/* TODO: swap out the victim and return the evicted frame. */
+	if (victim == NULL || !swap_out(victim->page))
+		return NULL;
 
-	return NULL;
+	return victim;
 }
 
 /* palloc() and get frame. If there is no available page, evict the page
@@ -193,9 +230,9 @@ vm_get_frame(void)
 	// 메모리가 꽉찼을 경우 swap out을 처리해줘야하지만 일단 panic(todo)로 케이스만 표시하고 넘어감.
 	if (paddr == NULL)
 	{
-		PANIC("todo");
+		frame = vm_evict_frame(); // 희생된 프레임 반환
+		paddr = frame->kva;
 	}
-
 	frame = (struct frame *)malloc(sizeof(struct frame)); // 프레임 할당
 	frame->kva = paddr;									  // 프레임 구조체 초기화
 	frame->page = NULL;
@@ -249,14 +286,9 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 		return false;
 	}
 
-	// printf("pg_round_up(f->rsp) : %p\n", pg_round_up(f->rsp));	   /* Debug */
-	// printf("pg_round_down(f->rsp) : %p\n", pg_round_down(f->rsp)); /* Debug */
-	// printf("f->rsp : %p\n", f->rsp);							   /* Debug */
-
 	page = spt_find_page(spt, addr);
 	if (page == NULL)
 	{
-
 		/* stack 증가(sp감소)로 인해서 발생한 pagefault일 때
 		 * 1. push로 인한 스택 증가 : 현재 스택포인터 다음 주소를 검사함 (rsp - 8 == addr)
 		 * 2. 함수 호출로 인한 스택 증가 : 스택포인터를 함수크기만큼 증가시키고 push함 (rsp <= addr)
@@ -349,6 +381,7 @@ vm_do_claim_page(struct page *page)
 	// unchecked : 매핑하는 함수가 맞는지 확실친 않음
 
 	// unchecked : 기본코드에 적혀있어서 일단 살려놨는데 의도를 모르겠음.
+	list_push_back(&ft.frame_list, &page->frame_elem);
 	if (pml4_set_page(thread_current()->pml4, page->va, page->frame->kva, page->writable))
 	{
 		// printf("pml4_set_page 성공\n"); /* Debug */

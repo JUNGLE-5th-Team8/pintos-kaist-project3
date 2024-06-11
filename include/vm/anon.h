@@ -14,6 +14,13 @@ struct anon_page
     bool (*page_initializer)(struct page *, enum vm_type, void *kva);
 };
 
+struct swap_table
+{
+    struct bitmap *swap_bitmap;
+};
+
+struct swap_table st;
+
 void vm_anon_init(void);
 bool anon_initializer(struct page *page, enum vm_type type, void *kva);
 
