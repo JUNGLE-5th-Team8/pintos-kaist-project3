@@ -151,7 +151,10 @@ page_fault(struct intr_frame *f)
 	}
 
 #endif
-
+	if(user){
+		printf("어디에서 발생 %p\n",fault_addr);
+		printf("페이지폴트핸들러!\n");
+	}
 	/* Count page faults. */
 	page_fault_cnt++;
 

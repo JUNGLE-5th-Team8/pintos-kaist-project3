@@ -101,10 +101,14 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
 
 		page->writable = writable;
 		page->is_loaded = false;
+		page->thread = thread_current();
+		enum intr_level il = intr_disable();
 		if (spt_insert_page(spt, page))
 		{
+			intr_set_level(il);
 			return true;
 		}
+		intr_set_level(il);
 	}
 
 err:
@@ -196,6 +200,19 @@ vm_get_victim(void)
 			// printf("야발\n");
 		}
 		page = list_entry(page_elem,struct page,ft_elem);
+		// if (page->va > USER_STACK)
+		// {
+		// 	page_elem  = page_elem->next;
+		// 	if (page_elem  == NULL)
+		// 		page_elem= list_begin(&ft);
+		// 	continue;
+		// }
+		// if(!page->writable){
+		// 	printf("vm_get_victim writable : %d %p\n",page->writable,page->va);
+		// 	page_elem = list_next(page_elem);
+		// 	continue;
+		// }
+
 		if(!pml4_is_accessed(page->thread->pml4,page->va)){
 			victim = page->frame;
 			break;
@@ -203,8 +220,8 @@ vm_get_victim(void)
 		pml4_set_accessed(page->thread->pml4,page->va,false);
 		page_elem = list_next(page_elem);
 	}
+	// printf("vm_get_victim writable out : %d %p\n",page->writable,page->va);
 	// printf("%p\!!!!!!!!\n",victim->page->va);
-
 	return victim;
 }
 
@@ -245,10 +262,10 @@ vm_get_frame(void)
 		}
 		// list_remove(&frame->page->ft_elem);
 
-		paddr = palloc_get_page(PAL_USER | PAL_ZERO);
+		paddr = frame->kva;
 	}
 
-	frame = malloc(sizeof(struct frame)); // 프레임 할당
+	frame = calloc(1,sizeof(struct frame)); // 프레임 할당
 	frame->kva = paddr;					 // 프레임 구조체 초기화
 	frame->page = NULL;
 
@@ -294,6 +311,9 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 	// printf("vm핸들러addr:%p\n", addr);
 	if (!is_user_vaddr(addr) || addr == NULL)
 	{
+		printf("not present %d\n",not_present);
+		printf("qwdwdq %d\n",write);
+		printf("zzzzzzzzzzzzzzzz %p\n",addr);
 		// printf("유효하지 않은 주소 접근 찐 page fault!\n"); // debug
 		return false; // 주소가 유저 공간이 아니면 실패
 	}
@@ -318,6 +338,7 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 	}
 	if (write && !page->writable)
 	{
+		printf("야바라라라라라라\n");
 		return false;
 	}
 
@@ -388,12 +409,20 @@ vm_do_claim_page(struct page *page)
 
 	/* TODO: Insert page table entry to map page's VA to frame's PA. */
 	// MMU 세팅: 가상 주소와 물리 주소를 매핑한 정보를 페이지 테이블에 추가해야한다.
-	page->thread = thread_current();
+	// page->thread = thread_current();
 
-	pml4_set_page(thread_current()->pml4, page->va, frame->kva, page->writable);
-	list_push_front(&ft,&page->ft_elem);
+	list_push_back(&ft,&page->ft_elem);
+	if(!pml4_set_page(page->thread->pml4, page->va, frame->kva, page->writable)){
+		printf("vm_do_claim_page pml4_set_page 실패");
+	}
+	// pml4_
 
-	return swap_in(page, frame->kva);
+	if(swap_in(page, frame->kva)){
+		return true;
+	}
+	else{
+		return false;
+	}
 }
 
 /* --------------------------project3 추가 함수 ------------------------------- */

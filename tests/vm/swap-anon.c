@@ -29,10 +29,13 @@ test_main (void)
     char *mem;
 
     for (i = 0 ; i < PAGE_COUNT ; i++) {
+        // printf("%d\n",i);
         if(!(i % 512))
             msg ("write sparsely over page %zu", i);
         mem = (big_chunks+(i*PAGE_SIZE));
+        // printf("%d\n",i);
         *mem = (char)i;
+        // printf("ㅋㅋ%d\n",*(size_t*)mem);
     }
 
     for (i = 0 ; i < PAGE_COUNT ; i++) {
