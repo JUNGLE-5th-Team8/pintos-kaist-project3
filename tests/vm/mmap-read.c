@@ -23,7 +23,7 @@ void test_main(void)
   if (memcmp(actual, sample, strlen(sample)))
     fail("read of mmap'd file reported bad data");
 
-  // printf("tlqkf4444444444444444444\n");
+  // printf("tlqkf4444444444444444444\n");/
 
   /* Verify that data is followed by zeros. */
   for (i = strlen(sample); i < 4096; i++)

@@ -34,8 +34,6 @@ void test_main(void)
         *mem = (char)i;
     }
 
-    printf("스왑테스트 넘어오나?\n");
-
     for (i = 0; i < PAGE_COUNT; i++)
     {
         mem = (big_chunks + (i * PAGE_SIZE));

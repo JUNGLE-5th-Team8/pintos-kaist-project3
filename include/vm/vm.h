@@ -6,7 +6,7 @@
 #include "devices/disk.h"
 
 // frame table : 원형 리스트
-static struct list frame_table;
+struct list frame_table;
 
 enum vm_type
 {
@@ -65,7 +65,7 @@ struct page
 	struct hash_elem hash_elem;	 // 해시테이블 element
 	struct list_elem frame_elem; // 프레임테이블 element
 	struct thread *thread;		 // 해당 물리 페이지를 사용중인 스레드 포인터
-	disk_sector_t sw_idx;		 // 스왑슬롯 인덱스 변수
+	size_t sw_idx;				 // 스왑슬롯 인덱스 변수
 
 	/*--------------------------------------------------------------*/
 
@@ -91,7 +91,7 @@ struct frame
 	/* ------------ project3 vm 멤버 추가----------------*/
 
 	// struct thread *thread;		// 해당 물리 페이지를 사용중인 스레드 포인터
-	// struct list_elem fram_elem; // list 연결을 위한 필드
+	struct list_elem frame_elem; // list 연결을 위한 필드
 
 	/*---------------------------------------------------*/
 };

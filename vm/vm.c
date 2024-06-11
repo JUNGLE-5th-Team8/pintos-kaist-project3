@@ -89,7 +89,7 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
 			page_initializer = anon_initializer;
 			uninit_new(page, upage, init, type, aux, page_initializer);
 			page->start_address = NULL;
-
+			page->thread = thread_current();
 			break;
 
 		case VM_FILE:;
@@ -100,6 +100,7 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
 			break;
 
 		default:
+			// page->thread = thread_current();
 			break;
 		}
 
@@ -175,46 +176,6 @@ void spt_remove_page(struct supplemental_page_table *spt, struct page *page)
 }
 
 /* Get the struct frame, that will be evicted. */
-// static struct frame *
-// vm_get_victim(void)
-// {
-// 	/* 희생자 프레임(페이지) 찾기
-// 	 * clock 알고리즘 사용*/
-
-// 	struct frame *victim = NULL;
-// 	/* TODO: The policy for eviction is up to you. */
-
-// 	// 프레임 테이블 순회하기 (clock 알고리즘으로 victim 선정)
-
-// 	struct list_elem *e;
-
-// 	/* 리스트의 처음부터 시작하여 끝까지 순회합니다. */
-// 	for (e = list_begin(&frame_table); e != list_end(&frame_table); e = list_next(e))
-// 	{
-// 		/* e를 포함하는 구조체로 변환합니다. */
-// 		struct page *p = list_entry(e, struct page, frame_elem);
-
-// 		bool access_bit = pml4_is_accessed(p->thread->pml4, p->va);
-// 		// access bit가 0이면 victim으로 선정
-// 		if (!access_bit)
-// 		{
-// 			// printf("victim 선정되고있나?\n"); // debug
-// 			victim = p->frame;
-// 			return victim;
-// 		}
-// 		// access bit가 1이면 0으로 설정하고 다음 요소로 넘어감
-// 		else
-// 		{
-// 			// printf("victim 액세스 비트가되나?\n");
-// 			pml4_set_accessed(p->thread->pml4, p->va, false);
-// 		}
-// 	}
-
-// 	e = list_begin(&frame_table);
-// 	struct page *p = list_entry(e, struct page, frame_elem);
-// 	victim = p->frame;
-// 	return victim;
-// }
 static struct frame *
 vm_get_victim(void)
 {
@@ -222,25 +183,34 @@ vm_get_victim(void)
 	/* TODO: The policy for eviction is up to you. */
 	if (list_empty(&frame_table))
 	{
-		printf("없네\n");
+		// printf("없네\n");
 		return NULL;
 	}
-	printf("여기인가?????\n");
 	struct list_elem *page_elem = list_begin(&frame_table);
-	printf("%p!!!!\n", page_elem);
+	// printf("%p!!!!\n", page_elem);
 	struct page *page = NULL;
 	while (1)
 	{
+
 		if (page_elem == list_end(&frame_table))
 		{
 			page_elem = list_begin(&frame_table);
-			printf("%p!!!!!\n", page_elem);
+			// printf("%p!!!!!\n", page_elem);
 			// printf("야발\n");
 		}
 		page = list_entry(page_elem, struct page, frame_elem);
+
+		// if (page->va > USER_STACK)
+		// {
+		// 	page_elem = page_elem->next;
+		// 	if (page_elem == NULL)
+		// 		page_elem = list_begin(&frame_table);
+		// 	continue;
+		// }
+
 		if (!pml4_is_accessed(page->thread->pml4, page->va))
 		{
-			printf("%p!!!!!\n", page_elem);
+			// printf("%p!!!!!\n", page_elem);
 
 			victim = page->frame;
 			break;
@@ -262,16 +232,21 @@ vm_evict_frame(void)
 	/* TODO: swap out the victim and return the evicted frame. */
 	if (victim == NULL)
 	{
-		printf("victimc이 null인가?\n"); // debug
+		// printf("victimc이 null인가?\n"); // debug
 		return NULL;
 	}
 
 	// 스왑 아웃 진행, 실패시 null 반환
 	if (!swap_out(victim->page))
 	{
-		printf("victimc이 null인가?\n"); // debug
+		// printf("victimc이 null인가?\n"); // debug
 		return NULL;
 	}
+
+	// if (victim->page)
+	// {
+	// 	swap_out(victim->page);
+	// }
 
 	return victim;
 }
@@ -285,27 +260,23 @@ vm_get_frame(void)
 {
 	struct frame *frame = NULL;
 	/* TODO: Fill this function. */
-	printf("겟프레임시도\n");
 
 	void *paddr = palloc_get_page(PAL_USER | PAL_ZERO);
 
 	// 메모리가 꽉찼을 경우 swap out을 처리해줘야하지만 일단 panic(todo)로 케이스만 표시하고 넘어감.
 	if (paddr == NULL)
 	{
-		// printf("겟프레임시도\n");
-
 		// printf("evict를 실행하나?\n"); // debug
-		// PANIC("todo");
+		// PANIC("todo");l
 		// 페이지 쫒아내기 정책 실행
 		if (!(frame = vm_evict_frame()))
 		{
 			// printf("희생자가 안나타나나?\n"); // debug
-			PANIC("swap out 실패!!!!!\n");
+			// PANIC("swap out 실패!!!!!\n");
 			return NULL;
 		}
-
-		paddr = palloc_get_page(PAL_USER | PAL_ZERO);
-		printf("paddr: %p\n", paddr); // debug
+		paddr = frame->kva;
+		// printf("paddr: %p\n", paddr); // debug
 	}
 
 	frame = malloc(sizeof(struct frame)); // 프레임 할당
@@ -354,7 +325,7 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 	// printf("vm핸들러addr:%p\n", addr);
 	if (!is_user_vaddr(addr) || addr == NULL)
 	{
-		// printf("유효하지 않은 주소 접근 찐 page fault!\n"); // debug
+		// printf("유효하지 않은 주소 접근 찐 page fault! %p\n", addr); // debug
 		return false; // 주소가 유저 공간이 아니면 실패
 	}
 
@@ -375,13 +346,16 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 			vm_stack_growth(addr);
 			return true;
 		}
-
+		// printf("스택접근?\n");
 		return false; // 페이지를 찾을 수 없으면 실패
 	}
 	if (write && !page->writable)
 	{
+		// printf("%d, %d\n", write, page->writable);
 		return false;
 	}
+
+	// printf("%d, %d\n", write, page->writable);
 
 	bool flag = false;
 	// merger test lock
@@ -399,7 +373,7 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 			lock_release(&filesys_lock);
 			flag = false;
 		}
-		printf("do claim 성공\n"); // debug
+		// printf("do claim 성공\n"); // debug
 		return true;
 	}
 	else
@@ -409,7 +383,7 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 			lock_release(&filesys_lock);
 			flag = false;
 		}
-		printf("do claim 실패\n"); // debug
+		// printf("do claim 실패\n"); // debug
 		return false;
 	}
 }
@@ -448,14 +422,14 @@ vm_do_claim_page(struct page *page)
 	/* Set links */
 	frame->page = page;
 	page->frame = frame;
+	// list_push_back(&frame_table, &page->frame_elem);
 
 	/* TODO: Insert page table entry to map page's VA to frame's PA. */
 	// MMU 세팅: 가상 주소와 물리 주소를 매핑한 정보를 페이지 테이블에 추가해야한다.
+	list_push_back(&frame_table, &page->frame_elem);
 
 	pml4_set_page(thread_current()->pml4, page->va, frame->kva, page->writable);
 	// 프레임을 할당받고, 프레임 테이블에 페이지 포인터를 넣어줌.
-	list_push_back(&frame_table, &page->frame_elem);
-	page->thread = thread_current();
 
 	return swap_in(page, frame->kva);
 }

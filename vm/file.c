@@ -188,6 +188,7 @@ void *do_mmap(void *addr, size_t length, int writable, struct file *file, off_t 
 		aux = aux_info;
 		if (!vm_alloc_page_with_initializer(VM_FILE, check_addr, writable, lazy_load_contents, aux))
 		{
+			// printf("do_mmap check\n");
 			return NULL;
 		}
 
@@ -196,7 +197,7 @@ void *do_mmap(void *addr, size_t length, int writable, struct file *file, off_t 
 		length -= page_read_bytes;
 		check_addr += PGSIZE;
 	}
-
+	// printf("do_mmap check2\n");
 	return addr;
 }
 

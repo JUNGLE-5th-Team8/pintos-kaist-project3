@@ -704,6 +704,7 @@ void *mmap(void *addr, size_t length, int writable, int fd, off_t offset)
 	/* 커널 주소 접근 예외처리*/
 	if (is_kernel_vaddr(addr) || is_kernel_vaddr(addr - length))
 	{
+		// printf("mmap check1\n");
 		return NULL;
 	}
 
@@ -784,7 +785,7 @@ void *mmap(void *addr, size_t length, int writable, int fd, off_t offset)
 	// 유효한 주소이면 do_mmap() 호출
 	if (do_mmap(addr, length, writable, get_file_from_fdt(fd), offset))
 	{
-		// printf("addr: %p", addr);
+		// printf("addr: %p\n", addr);
 		return addr;
 	}
 	return NULL;
