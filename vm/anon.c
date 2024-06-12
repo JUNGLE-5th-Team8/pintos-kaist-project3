@@ -57,10 +57,10 @@ anon_swap_in(struct page *page, void *kva)
 	// printf("인덱스 %d 어드레스 %p 롸이터블? %d!!!!!!!\n",page->anon.st_idx,page->va,page->writable);
 	page->is_loaded = true;
 
-	pml4_set_page(page->thread->pml4, page->va, kva, true);
+	// pml4_set_page(thread_current()->pml4, page->va, kva, true);
 
 	anon_page->st_idx = -1;
-	// page->writable =true;
+	page->writable =true;
 	return true;
 }
 
@@ -83,14 +83,9 @@ anon_swap_out(struct page *page)
 	anon_page->st_idx = idx;
 
 	list_remove(&page->ft_elem);
-	pml4_clear_page(page->thread->pml4,page->va);
-	// palloc_free_page(page->frame->kva);
+	pml4_clear_page(thread_current()->pml4,page->va);
 
 	page->is_loaded = false;
-	// page->frame->page = NULL;
-	// page->frame = NULL;
-	// page->writable =true;
-	// free(page->frame);
 	return true;
 }
 

@@ -101,14 +101,11 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
 
 		page->writable = writable;
 		page->is_loaded = false;
-		page->thread = thread_current();
-		enum intr_level il = intr_disable();
+
 		if (spt_insert_page(spt, page))
 		{
-			intr_set_level(il);
 			return true;
 		}
-		intr_set_level(il);
 	}
 
 err:
@@ -186,10 +183,10 @@ vm_get_victim(void)
 {
 	struct frame *victim = NULL;
 	/* TODO: The policy for eviction is up to you. */
-	if(list_empty(&ft)){
-		printf("없네\n");
-		return NULL;
-	}
+	// if(list_empty(&ft)){
+	// 	printf("없네\n");
+	// 	return NULL;
+	// }
 	struct list_elem* page_elem = list_begin(&ft);
 	// printf("%p!!!!\n");
 	struct page* page = NULL;
@@ -200,24 +197,13 @@ vm_get_victim(void)
 			// printf("야발\n");
 		}
 		page = list_entry(page_elem,struct page,ft_elem);
-		// if (page->va > USER_STACK)
-		// {
-		// 	page_elem  = page_elem->next;
-		// 	if (page_elem  == NULL)
-		// 		page_elem= list_begin(&ft);
-		// 	continue;
-		// }
-		// if(!page->writable){
-		// 	printf("vm_get_victim writable : %d %p\n",page->writable,page->va);
-		// 	page_elem = list_next(page_elem);
-		// 	continue;
-		// }
 
-		if(!pml4_is_accessed(page->thread->pml4,page->va)){
+		if(!pml4_is_accessed(thread_current()->pml4,page->va)){
 			victim = page->frame;
 			break;
 		}
-		pml4_set_accessed(page->thread->pml4,page->va,false);
+
+		pml4_set_accessed(thread_current()->pml4,page->va,false);
 		page_elem = list_next(page_elem);
 	}
 	// printf("vm_get_victim writable out : %d %p\n",page->writable,page->va);
@@ -230,13 +216,14 @@ vm_get_victim(void)
 static struct frame *
 vm_evict_frame(void)
 {
+	// printf("아아아앙\n");
 	struct frame *victim UNUSED = vm_get_victim();
 	/* TODO: swap out the victim and return the evicted frame. */
 	if(victim==NULL){
 		return NULL;
 	}
 	if(!swap_out(victim->page)){
-		// prinf("야발\n");
+		// printf("야발\n");
 		return NULL;
 	}
 	return victim;
@@ -311,9 +298,9 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 	// printf("vm핸들러addr:%p\n", addr);
 	if (!is_user_vaddr(addr) || addr == NULL)
 	{
-		printf("not present %d\n",not_present);
-		printf("qwdwdq %d\n",write);
-		printf("zzzzzzzzzzzzzzzz %p\n",addr);
+		// printf("not present %d\n",not_present);
+		// printf("qwdwdq %d\n",write);
+		// printf("zzzzzzzzzzzzzzzz %p\n",addr);
 		// printf("유효하지 않은 주소 접근 찐 page fault!\n"); // debug
 		return false; // 주소가 유저 공간이 아니면 실패
 	}
@@ -334,11 +321,13 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 			return true;
 		}
 
+		// printf(" 스택을 넘낰?\n");
 		return false; // 페이지를 찾을 수 없으면 실패
 	}
 	if (write && !page->writable)
 	{
-		printf("야바라라라라라라\n");
+
+		// printf("야바라라라라라라\n");
 		return false;
 	}
 
@@ -367,6 +356,7 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 			lock_release(&filesys_lock);
 			flag = false;
 		}
+
 		// printf("do claim 실패\n"); //debug
 		return false;
 	}
@@ -411,12 +401,11 @@ vm_do_claim_page(struct page *page)
 	// MMU 세팅: 가상 주소와 물리 주소를 매핑한 정보를 페이지 테이블에 추가해야한다.
 	// page->thread = thread_current();
 
-	list_push_back(&ft,&page->ft_elem);
-	if(!pml4_set_page(page->thread->pml4, page->va, frame->kva, page->writable)){
+	list_push_back(&ft, &page->ft_elem);
+	if(!pml4_set_page(thread_current()->pml4, page->va, frame->kva, page->writable)){
 		printf("vm_do_claim_page pml4_set_page 실패");
 	}
 	// pml4_
-
 	if(swap_in(page, frame->kva)){
 		return true;
 	}
@@ -471,7 +460,6 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 								  struct supplemental_page_table *src UNUSED)
 {
 	struct hash_iterator i;
-
 	hash_first(&i, &src->hash_table);
 	while (hash_next(&i))
 	{
@@ -496,10 +484,12 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
 				flag = false;
 				lock_release(&filesys_lock);
 			}
+			// printf("로드가된경우\n");
 		}
 		// 로드가 안 된 경우
 		else
 		{
+			// printf("로드가안된경우\n");
 			// 자식에게 전달할 aux
 			void *aux = malloc(sizeof(lazy_load_info));
 
@@ -520,9 +510,13 @@ static void hash_action_clear(struct hash_elem *e, void *aux)
 	{
 		free(page->frame);
 	}
+	// printf("이게 안되나?\n");
 
 	destroy(page);
-	free(page);
+	if(page==NULL){
+		printf("어왜 없냐?\n");
+	}
+	// free(page);
 }
 
 /* Free the resource hold by the supplemental page table */
