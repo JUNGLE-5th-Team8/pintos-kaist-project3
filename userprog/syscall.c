@@ -42,6 +42,10 @@ int write(int fd, const void *buffer, unsigned size);
 void seek(int fd, unsigned position);
 unsigned tell(int fd);
 void close(int fd);
+/*-------------------- project3 append------------------------------*/
+void *mmap(void *addr, size_t length, int writable, int fd, off_t offset);
+void munmap(void *addr);
+/*---------------------------------------------------------------*/
 
 /* System call.
  *
@@ -134,6 +138,26 @@ void syscall_handler(struct intr_frame *f UNUSED)
 	case SYS_CLOSE: /* Close an open file. */
 		close((int)f->R.rdi);
 		break;
+	case SYS_MMAP:
+		// void *mmap(void *addr, size_t length, int writable, int fd, off_t offset);
+		// 1번째 인자: %rdi
+		// 2번째 인자: %rsi
+		// 3번째 인자: %rdx
+		// 4번째 인자: %r10
+		// 5번째 인자: %r8
+		// merger test lock
+		lock_acquire(&filesys_lock);
+		f->R.rax = mmap((void *)f->R.rdi, (size_t)f->R.rsi, (int)f->R.rdx, (int)f->R.r10, (off_t)f->R.r8);
+		lock_release(&filesys_lock);
+		break;
+	case SYS_MUNMAP:
+		// void munmap(void *addr);
+		// merger test lock
+		lock_acquire(&filesys_lock);
+		munmap((void *)f->R.rdi);
+		lock_release(&filesys_lock);
+		break;
+
 	// case SYS_DUP2: /* 구현 실패... */
 	// 	dup2((int)f->R.rdi, (int)f->R.rsi);
 	// 	break;
@@ -149,7 +173,7 @@ void check_address(void *addr)
 {
 	// 포인터가 가리키는 주소가 유저 영역의 주소인지 확인
 	// 주어진 주소가 현재 프로세스의 페이지 테이블에 유효하게 매핑되어 있는지 확인
-	if (addr == NULL || !is_user_vaddr(addr) || pml4_get_page(thread_current()->pml4, addr) == NULL)
+	if (addr == NULL || !is_user_vaddr(addr) || spt_find_page(&thread_current()->spt, addr) == NULL)
 	{
 		// 잘못된 접근일 경우 프로세스 종료
 		exit(-1);
@@ -244,6 +268,7 @@ void exit(int status)
 	struct thread *curr = thread_current();
 	curr->exit_status = status;
 	printf("%s: exit(%d)\n", curr->name, status); // Process Termination Message /* 정상적으로 종료됐다면 status는 0 */
+
 	thread_exit();
 }
 
@@ -322,7 +347,21 @@ bool create(const char *file, unsigned initial_size)
 	/* 파일 생성 성공 시 true 반환, 실패 시 false 반환 */
 	check_address((void *)file);
 	// 실제 파일 시스템 호출로 변경 필요
-	return filesys_create(file, initial_size);
+	bool flag = false;
+	// merger test lock
+	if (!lock_held_by_current_thread(&filesys_lock))
+	{
+		lock_acquire(&filesys_lock);
+		flag = true;
+	}
+	bool result = filesys_create(file, initial_size);
+	if (flag)
+	{
+		flag = false;
+		lock_release(&filesys_lock);
+	}
+
+	return result;
 }
 
 /**
@@ -341,8 +380,23 @@ bool remove(const char *file)
 	/* 파일 이름에 해당하는 파일을 제거 */
 	/* 파일 제거 성공 시 true 반환, 실패 시 false 반환 */
 	check_address((void *)file);
+
+	bool flag = false;
+	// merger test lock
+	if (!lock_held_by_current_thread(&filesys_lock))
+	{
+		lock_acquire(&filesys_lock);
+		flag = true;
+	}
+	bool result = filesys_remove(file);
+	if (flag)
+	{
+		flag = false;
+		lock_release(&filesys_lock);
+	}
+
 	// 실제 파일 시스템 호출로 변경 필요
-	return filesys_remove(file);
+	return result;
 }
 
 /**
@@ -353,8 +407,26 @@ bool remove(const char *file)
  */
 int open(const char *file)
 {
-	check_address(file);				 // 주어진 파일 이름 주소가 유효한지 확인합니다.
-	struct file *f = filesys_open(file); // 파일 시스템에서 파일을 엽니다.
+	// printf("오픈이 돌아가나?\n");
+
+	check_address(file); // 주어진 파일 이름 주소가 유효한지 확인합니다.
+						 // printf("오픈이 오류나나222222?\n");
+
+	struct file *f;
+	// merger test lock
+	bool flag = false;
+	if (!lock_held_by_current_thread(&filesys_lock))
+	{
+		lock_acquire(&filesys_lock);
+		flag = true;
+	}
+	f = filesys_open(file); // 파일 시스템에서 파일을 엽니다.
+	if (flag)
+	{
+		flag = false;
+		lock_release(&filesys_lock);
+	}
+
 	if (!f)
 	{
 		return -1; // 파일을 열 수 없는 경우 -1을 반환합니다.
@@ -364,7 +436,21 @@ int open(const char *file)
 	// return fd;							  // 파일 디스크립터를 반환합니다.
 	int fd = add_file_to_fdt(f);
 	if (fd == -1)
+	{
+		bool flag = false;
+		// merger test lock
+		if (!lock_held_by_current_thread(&filesys_lock))
+		{
+			lock_acquire(&filesys_lock);
+			flag = true;
+		}
 		file_close(f);
+		if (flag)
+		{
+			flag = false;
+			lock_release(&filesys_lock);
+		}
+	}
 	return fd;
 }
 
@@ -382,7 +468,22 @@ int filesize(int fd)
 	{
 		return -1; // 파일이 열려 있지 않은 경우 -1을 반환합니다.
 	}
-	return file_length(f); // 파일의 길이를 반환합니다.
+
+	bool flag = false;
+	// merger test lock
+	if (!lock_held_by_current_thread(&filesys_lock))
+	{
+		lock_acquire(&filesys_lock);
+		flag = true;
+	}
+	off_t result = file_length(f);
+	if (flag)
+	{
+		flag = false;
+		lock_release(&filesys_lock);
+	}
+
+	return result; // 파일의 길이를 반환합니다.
 }
 
 /**
@@ -396,6 +497,12 @@ int filesize(int fd)
 int read(int fd, void *buffer, unsigned size)
 {
 	check_address(buffer); // 주어진 버퍼 주소가 유효한지 확인합니다.
+	// 버퍼가 읽기 전용이면 종료 -ptr-write-code2
+	if (spt_find_page(&thread_current()->spt, buffer)->writable == false)
+	{
+		exit(-1);
+	}
+
 	off_t read_byte;
 	uint8_t *read_buffer = buffer;
 	if (fd == STDIN_FILENO)
@@ -423,9 +530,21 @@ int read(int fd, void *buffer, unsigned size)
 		{
 			return -1; // 파일이 열려 있지 않은 경우 -1을 반환합니다.
 		}
-		lock_acquire(&filesys_lock); // file을 읽을 때 다른 프로세스의 접근을 막기 위해 lock
+
+		bool flag = false;
+		// merger test lock
+		if (!lock_held_by_current_thread(&filesys_lock))
+		{
+			lock_acquire(&filesys_lock);
+			flag = true;
+		}
 		read_byte = file_read(f, buffer, size);
-		lock_release(&filesys_lock);
+
+		if (flag)
+		{
+			flag = false;
+			lock_release(&filesys_lock);
+		}
 	}
 	return read_byte; // 파일에서 데이터를 읽고, 읽은 바이트 수를 반환합니다.
 }
@@ -441,6 +560,7 @@ int read(int fd, void *buffer, unsigned size)
 int write(int fd, const void *buffer, unsigned size)
 {
 	check_address((void *)buffer); // 주어진 버퍼 주소가 유효한지 확인합니다.
+
 	off_t write_byte;
 	if (fd == STDIN_FILENO)
 	{
@@ -459,9 +579,20 @@ int write(int fd, const void *buffer, unsigned size)
 		{
 			return -1; // 파일이 열려 있지 않은 경우 -1을 반환합니다.
 		}
-		lock_acquire(&filesys_lock); // file을 읽을 때 다른 프로세스의 접근을 막기 위해 lock
+
+		bool flag = false;
+		// merger test lock
+		if (!lock_held_by_current_thread(&filesys_lock))
+		{
+			lock_acquire(&filesys_lock);
+			flag = true;
+		}
 		write_byte = file_write(f, buffer, size);
-		lock_release(&filesys_lock);
+		if (flag)
+		{
+			flag = false;
+			lock_release(&filesys_lock);
+		}
 	}
 	return write_byte; // 파일에 데이터를 쓰고, 쓴 바이트 수를 반환합니다.
 }
@@ -482,7 +613,19 @@ void seek(int fd, unsigned position)
 		// {
 		// 	return;
 		// }
+		bool flag = false;
+		// merger test lock
+		if (!lock_held_by_current_thread(&filesys_lock))
+		{
+			lock_acquire(&filesys_lock);
+			flag = true;
+		}
 		file_seek(f, position); // 파일의 위치를 지정한 위치로 이동합니다.
+		if (flag)
+		{
+			flag = false;
+			lock_release(&filesys_lock);
+		}
 	}
 }
 
@@ -502,7 +645,21 @@ unsigned tell(int fd)
 		// {
 		// 	return;
 		// }
-		return file_tell(f); // 파일의 현재 위치를 반환합니다.
+		bool flag = false;
+		// merger test lock
+		if (!lock_held_by_current_thread(&filesys_lock))
+		{
+			lock_acquire(&filesys_lock);
+			flag = true;
+		}
+		off_t tell_value = file_tell(f); // 파일의 현재 위치를 반환합니다.
+		if (flag)
+		{
+			flag = false;
+			lock_release(&filesys_lock);
+		}
+
+		return tell_value;
 	}
 	return -1; // 파일이 열려 있지 않은 경우 -1을 반환합니다.
 }
@@ -522,10 +679,128 @@ void close(int fd)
 	struct file *f = get_file_from_fdt(fd);
 	if (f)
 	{
+		// merger test lock
+		bool flag = false;
+		if (!lock_held_by_current_thread(&filesys_lock))
+		{
+			lock_acquire(&filesys_lock);
+			flag = true;
+		}
 		file_close(f); // 파일을 닫습니다.
+
+		if (flag)
+		{
+			flag = false;
+			lock_release(&filesys_lock);
+		}
+
 		// thread_current()->fd_table[fd] = NULL; // 파일 디스크립터 테이블에서 파일 포인터를 제거합니다.
 		remove_file_from_fdt(fd);
 	}
+}
+
+void *mmap(void *addr, size_t length, int writable, int fd, off_t offset)
+{
+	/* 커널 주소 접근 예외처리*/
+	if (is_kernel_vaddr(addr) || is_kernel_vaddr(addr - length))
+	{
+		// printf("mmap check1\n");
+		return NULL;
+	}
+
+	if (length == 0)
+	{
+		return NULL;
+	}
+
+	if (fd < 2 || MAX_FILES <= fd) // for write-bad-fd
+	{
+		return NULL; /* Ignore stdin and stdout. */
+	}
+
+	bool flag = false;
+	// merger test lock
+	if (!lock_held_by_current_thread(&filesys_lock))
+	{
+		lock_acquire(&filesys_lock);
+		flag = true;
+	}
+	/* 파일길이가 0인 경우와 파일이 닫힌 경우 처리*/
+	if (filesize(fd) < 1)
+	{
+		if (flag)
+		{
+			flag = false;
+			lock_release(&filesys_lock);
+		}
+		return NULL;
+	}
+	if (flag)
+	{
+		flag = false;
+		lock_release(&filesys_lock);
+	}
+
+	// merger test lock
+	if (!lock_held_by_current_thread(&filesys_lock))
+	{
+		lock_acquire(&filesys_lock);
+		flag = true;
+	}
+	size_t fixed_length = filesize(fd) - offset;
+
+	if (length > fixed_length)
+	{
+		length = fixed_length;
+	}
+	if (flag)
+	{
+		flag = false;
+		lock_release(&filesys_lock);
+	}
+
+	void *check_addr = addr;
+	/* 중복된 페이지가 있는지 검사 -> while문으로 확인*/
+	while (check_addr < (length + addr))
+	{
+		if (spt_find_page(&thread_current()->spt, check_addr))
+		{
+			return NULL;
+		}
+		check_addr += PGSIZE;
+	}
+
+	/* addr이 정렬된 페이지인지 확인*/
+	if (addr != pg_round_down(addr))
+	{
+		return NULL;
+	}
+
+	/* 유효하지 않은 offset 확인*/
+	if (offset % PGSIZE != 0)
+	{
+		return NULL;
+	}
+
+	// 유효한 주소이면 do_mmap() 호출
+	if (do_mmap(addr, length, writable, get_file_from_fdt(fd), offset))
+	{
+		// printf("addr: %p\n", addr);
+		return addr;
+	}
+	return NULL;
+}
+
+void munmap(void *addr)
+{
+	// printf("언맵이 돌아가나?\n");
+
+	// 유효한 주소인지 확인
+	check_address(addr);
+	// printf("언맵이 돌아가나?\n");
+
+	// 유효한 주소이면 do_munmap() 호출
+	do_munmap(addr);
 }
 
 // /**

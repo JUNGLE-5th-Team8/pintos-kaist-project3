@@ -323,9 +323,12 @@ int process_exec(void *f_name)
 	// }
 
 	/* And then load the binary */ /* 바이너리를 로드합니다. */
-	// success = load(file_name, &_if);
-	/* 실행 파일 이름을 load 함수의 첫 번째 인자로 전달합니다. */
+								   // success = load(file_name, &_if);
+								   /* 실행 파일 이름을 load 함수의 첫 번째 인자로 전달합니다. */
+	// merger test lock
+	lock_acquire(&filesys_lock);
 	success = load(argv[0], &_if);
+	lock_release(&filesys_lock);
 
 	/* If load failed, quit. */ /* 로드에 실패하면 종료합니다. */
 	if (!success)
@@ -489,11 +492,11 @@ void process_exit(void)
 	// Notify parent that we are exiting. /* 부모에게 종료 상태를 알려줍니다. */
 	sema_up(&curr->wait_sema); // 자식 스레드가 종료될 때 대기하고 있는 부모에게 signal을 보낸다. // 종료되었다고 기다리고 있는 부모 thread에게 signal 보냄-> sema_up에서 val을 올려줌
 
+	process_cleanup(); // pml4를 해제(이 함수를 call 한 thread의 pml4)
 	// Wait for parent to acknowledge exit.
 	sema_down(&curr->exit_sema); // 자식 스레드가 완료되었음을 알리는 세마포어를 사용합니다. // 부모의 signal을 기다린다. 대기가 풀리고 나서 do_schedule(THREAD_DYING)이 이어져 다른 스레드가 실행된다. // 부모의 exit_Status가 정확히 전달되었는지 확인(wait)
 
 	// Clean up process resources.
-	process_cleanup(); // pml4를 해제(이 함수를 call 한 thread의 pml4)
 }
 
 /* Free the current process's resources. */
@@ -920,6 +923,58 @@ lazy_load_segment(struct page *page, void *aux)
 	/* TODO: Load the segment from the file */
 	/* TODO: This called when the first page fault occurs on address VA. */
 	/* TODO: VA is available when calling this function. */
+	if (page == NULL)
+	{
+		return false;
+	}
+
+	lazy_load_info *info = aux;
+
+	page->is_loaded = true;
+	bool flag = false;
+	// merger test lock
+	if (!lock_held_by_current_thread(&filesys_lock))
+	{
+		lock_acquire(&filesys_lock);
+		flag = true;
+	}
+	file_seek(info->file, info->offset);
+	if (flag)
+	{
+		flag = false;
+		lock_release(&filesys_lock);
+	}
+
+	// merger test lock
+	if (!lock_held_by_current_thread(&filesys_lock))
+	{
+		flag = true;
+		lock_acquire(&filesys_lock);
+	}
+
+	// 파일에서 페이지를 읽어 메모리에 로드한다.
+	if (file_read(info->file, page->frame->kva, info->read_bytes) != (int)info->read_bytes)
+	{
+		if (flag)
+		{
+			flag = false;
+			lock_release(&filesys_lock);
+		}
+
+		// printf("lazyload 읽기 실패\n"); // debug
+		return false; // 파일 읽기 실패
+	}
+	if (flag)
+	{
+		flag = false;
+		lock_release(&filesys_lock);
+	}
+
+	memset(page->frame->kva + info->read_bytes, 0, info->zero_bytes);
+
+	// free(info); // unchecked aux malloc free/
+
+	return true;
 }
 
 /* Loads a segment starting at offset OFS in FILE at address
@@ -953,12 +1008,27 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 		size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
 		/* TODO: Set up aux to pass information to the lazy_load_segment. */
+
 		void *aux = NULL;
+		lazy_load_info *aux_info = malloc(sizeof(struct lazy_load_info_t));
+		if (aux_info == NULL)
+		{
+			return false;
+		}
+		aux_info->file = file;
+		aux_info->offset = ofs;
+		aux_info->read_bytes = page_read_bytes;
+		aux_info->zero_bytes = page_zero_bytes;
+
+		aux = aux_info;
 		if (!vm_alloc_page_with_initializer(VM_ANON, upage,
 											writable, lazy_load_segment, aux))
+		{
 			return false;
+		}
 
 		/* Advance. */
+		ofs += page_read_bytes;
 		read_bytes -= page_read_bytes;
 		zero_bytes -= page_zero_bytes;
 		upage += PGSIZE;
@@ -972,12 +1042,17 @@ setup_stack(struct intr_frame *if_)
 {
 	bool success = false;
 	void *stack_bottom = (void *)(((uint8_t *)USER_STACK) - PGSIZE);
-
 	/* TODO: Map the stack on stack_bottom and claim the page immediately.
 	 * TODO: If success, set the rsp accordingly.
 	 * TODO: You should mark the page is stack. */
 	/* TODO: Your code goes here */
-
+	if (vm_alloc_page(VM_MARKER_0 | VM_ANON, stack_bottom, true))
+	{
+		// printf(“vm_alloc_page stack 성공\nstack_pointer : %p\n\n”, USER_STACK); /* Debug */
+		success = vm_claim_page(stack_bottom);
+		if (success)
+			if_->rsp = USER_STACK;
+	}
 	return success;
 }
 #endif /* VM */

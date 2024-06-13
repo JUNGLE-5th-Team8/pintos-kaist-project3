@@ -403,6 +403,7 @@ void thread_exit(void)
 	ASSERT(!intr_context());
 
 #ifdef USERPROG
+
 	process_exit();
 #endif
 
